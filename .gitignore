@@ -1,0 +1,26 @@
+.claude/
+keys.json
+.env
+.venv/
+venv/
+STT_env/
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Local media and generated artifacts
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.mp4
+*.mov
+*.srt
+*.vtt
+*.jsonl
+outputs/
+models/
+checkpoints/
