@@ -8,8 +8,27 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import audio as audio_mod
-from .config import Config, load_hf_token, resolve_device_dtype
+from .config import Config, hms, load_hf_token, resolve_device_dtype
 from .diarize import Segment
+
+
+def _build_data(audio_path, segments, project, date, context, diarize) -> dict:
+    return {
+        "audio_path": str(audio_path),
+        "model": "Qwen3-ASR-1.7B",
+        "diarization_model": "pyannote-community/speaker-diarization-community-1" if diarize else None,
+        "context": context,
+        "diarized": diarize,
+        "project": project,
+        "date": date,
+        "segments": [asdict(s) for s in segments],
+    }
+
+
+def _dump_partial(path: Path, audio_path, segments, project, date, context, diarize) -> None:
+    """진행 중 중간저장 — 끊겨도 다음 실행에서 이어할 수 있게 한다."""
+    data = _build_data(audio_path, segments, project, date, context, diarize)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _save_outputs(config: Config, stem: str, data: dict) -> tuple[Path, Path]:
@@ -41,11 +60,20 @@ def transcribe(
     date: Optional[str] = None,
     config: Optional[Config] = None,
 ) -> dict:
-    """전체 전사 파이프라인 실행. 화자 귀속 transcript dict를 반환하고 outputs/에 저장."""
-    config = config or Config.from_cwd()
-    device, dtype = resolve_device_dtype()
+    """전체 전사 파이프라인 실행. 화자 귀속 transcript dict를 반환하고 outputs/에 저장.
 
+    - ASR(Qwen3)은 GPU(MPS)가 있으면 GPU로, 없으면 CPU로. 화자분리(pyannote)는 안정성 위해 CPU.
+    - 긴 음성 대비: 구간별 진행 로그 + 중간저장(.partial.json) + 재시작 시 이어하기."""
+    import time
+
+    config = config or Config.from_cwd()
+    device, dtype = resolve_device_dtype()  # ASR 디바이스(MPS 우선)
+    stem = Path(audio_path).stem
+    config.outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"[1/3] 오디오 로딩: {audio_path}")
     audio, sr = audio_mod.load_audio(audio_path)
+    print(f"      길이 {len(audio)/sr/60:.1f}분, ASR 디바이스={device}")
 
     from .asr import Qwen3Engine
 
@@ -56,16 +84,47 @@ def transcribe(
         from .diarize import Diarizer
 
         token = load_hf_token(config.root)
-        diarizer = Diarizer(config.diarize_source, token, device)
+        print(f"[2/3] 화자분리(pyannote) 실행 중... (device={device})")
+        diarizer = Diarizer(config.diarize_source, token, device)  # MPS 우선, 실패 시 CPU 폴백
         segments = diarizer.run(audio, sr, num_speakers=num_speakers)
+        n = len(segments)
+        print(f"      세그먼트 {n}개, 화자 {len({s.speaker for s in segments})}명")
 
+        # 이전 진행분(.partial.json) 이어하기
+        partial_path = config.outputs_dir / f"{stem}.partial.json"
+        done: dict = {}
+        if partial_path.exists():
+            try:
+                prev = json.loads(partial_path.read_text(encoding="utf-8"))
+                if prev.get("audio_path") == str(audio_path) and len(prev.get("segments", [])) == n:
+                    for i, s in enumerate(prev["segments"]):
+                        if s.get("text"):
+                            done[i] = s["text"]
+                    if done:
+                        print(f"      이어하기: 이전 {len(done)}/{n} 재사용")
+            except Exception:
+                pass
+
+        print(f"[3/3] 전사 시작 ({n}개 구간)")
+        t0 = time.time()
         with audio_mod.TempWav() as tmp:
             for i, seg in enumerate(segments):
+                if i in done:
+                    seg.text = done[i]
+                    continue
                 clip = audio_mod.slice_audio(audio, sr, seg.start, seg.end)
                 if len(clip) == 0:
                     continue
                 wav = tmp.write(f"seg_{i}.wav", clip, sr)
                 seg.text = engine.transcribe_file(wav, context=context)
+                if (i + 1) % 5 == 0 or i + 1 == n:
+                    el = time.time() - t0
+                    rate = (i + 1) / el if el else 0
+                    eta_s = (n - i - 1) / rate if rate else 0
+                    print(f"      [{i+1}/{n}] {hms(seg.end)} 지점 | 경과 {hms(el)} | ETA {hms(eta_s)}", flush=True)
+                    # 중간저장(끊겨도 보존)
+                    _dump_partial(partial_path, audio_path, segments, project, date, context, diarize)
+        partial_path.unlink(missing_ok=True)  # 완료 → partial 제거
     else:
         # 화자분리 없이 30초/2초 오버랩 청킹 전사 → 단일 화자 세그먼트로 표현
         chunks = audio_mod.chunk_audio(audio, sr)
@@ -73,18 +132,7 @@ def transcribe(
         total = len(audio) / sr
         segments = [Segment(speaker="SPEAKER_00", start=0.0, end=total, text=text)]
 
-    data = {
-        "audio_path": str(audio_path),
-        "model": Qwen3Engine.MODEL_NAME,
-        "diarization_model": "pyannote/speaker-diarization-3.1" if diarize else None,
-        "context": context,
-        "diarized": diarize,
-        "project": project,
-        "date": date,
-        "segments": [asdict(s) for s in segments],
-    }
-
-    stem = Path(audio_path).stem
+    data = _build_data(audio_path, segments, project, date, context, diarize)
     json_path, md_path = _save_outputs(config, stem, data)
     data["_json_path"] = str(json_path)
     data["_md_path"] = str(md_path)

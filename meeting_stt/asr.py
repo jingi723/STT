@@ -23,13 +23,25 @@ class Qwen3Engine:
             raise FileNotFoundError(
                 f"{model_path} 가 없습니다. `scripts/download_models.py`를 실행해 Qwen3-ASR 모델을 받으세요."
             )
-        self.model = Qwen3ASRModel.from_pretrained(
-            str(p),
-            dtype=dtype,
-            device_map=device,
-            max_inference_batch_size=8,  # 청크 병렬 배치. 클수록 빠르나 RAM↑
-            max_new_tokens=512,          # 한 추론 최대 토큰. 짧으면 긴 발화가 잘림
-        )
+
+        def _load(dev, dt):
+            return Qwen3ASRModel.from_pretrained(
+                str(p), dtype=dt, device_map=dev,
+                max_inference_batch_size=8,  # 청크 병렬 배치. 클수록 빠르나 RAM↑
+                max_new_tokens=512,          # 한 추론 최대 토큰. 짧으면 긴 발화가 잘림
+            )
+
+        try:
+            self.model = _load(device, dtype)
+            self.device = device
+        except Exception as e:  # MPS/GPU 로드 실패 → CPU 폴백(더 나빠지지 않게)
+            if device == "cpu":
+                raise
+            import torch
+
+            print(f"[asr] {device} 로드 실패 → CPU 폴백: {e}")
+            self.model = _load("cpu", torch.float32)
+            self.device = "cpu"
 
     @staticmethod
     def _clean_context(context: Optional[str]) -> Optional[str]:
@@ -54,10 +66,20 @@ class Qwen3Engine:
     def transcribe_chunks(
         self, chunks: List[Chunk], sample_rate: int, context: Optional[str] = None
     ) -> str:
-        """청크 리스트를 순서대로 전사해 하나의 텍스트로 이어붙인다."""
+        """청크 리스트를 순서대로 전사해 하나의 텍스트로 이어붙인다(진행률 로그 포함)."""
+        import time
+
         parts: List[str] = []
+        n = len(chunks)
+        t0 = time.time()
         with TempWav() as tmp:
             for i, chunk in enumerate(chunks):
                 wav = tmp.write(f"chunk_{i}.wav", chunk.audio, sample_rate)
                 parts.append(self.transcribe_file(wav, context=context))
+                if (i + 1) % 10 == 0 or i + 1 == n:
+                    from .config import hms
+
+                    el = time.time() - t0
+                    eta_s = (n - i - 1) / ((i + 1) / el) if el else 0
+                    print(f"      [{i+1}/{n} 청크] 경과 {hms(el)} | ETA {hms(eta_s)}", flush=True)
         return " ".join(parts)

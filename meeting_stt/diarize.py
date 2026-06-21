@@ -43,7 +43,17 @@ class Diarizer:
             self.pipeline.segmentation.min_duration_off = 1.0
         except AttributeError:
             pass
-        self.pipeline = self.pipeline.to(torch.device(device))
+        # MPS/GPU로 이동 시도, 실패하면 CPU 폴백(더 나빠지지 않게)
+        try:
+            self.pipeline = self.pipeline.to(torch.device(device))
+            self.device = device
+        except Exception as e:
+            if device != "cpu":
+                print(f"[diarize] {device} 이동 실패 → CPU 폴백: {e}")
+                self.pipeline = self.pipeline.to(torch.device("cpu"))
+                self.device = "cpu"
+            else:
+                raise
 
     def run(self, audio, sample_rate: int, num_speakers: Optional[int] = None) -> List[Segment]:
         """오디오를 화자별 세그먼트로 분리. 화자 수를 알면 num_speakers로 정확도 향상."""

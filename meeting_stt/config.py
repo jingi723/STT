@@ -45,12 +45,23 @@ class Config:
         return cls(root=Path.cwd())
 
 
+def hms(seconds) -> str:
+    """초 → 'H:MM:SS' 문자열. 예: 14 → '0:00:14', 5400 → '1:30:00'."""
+    s = int(round(float(seconds)))
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    return f"{h}:{m:02d}:{sec:02d}"
+
+
 def resolve_device_dtype():
-    """CUDA가 있으면 (cuda:0, bfloat16), 없으면 (cpu, float32). torch를 지연 import."""
+    """ASR용 디바이스/dtype. CUDA > MPS(애플 GPU) > CPU 순. torch를 지연 import.
+    MPS 로드 실패 시 asr.py가 자동으로 CPU로 폴백한다."""
     import torch
 
     if torch.cuda.is_available():
         return "cuda:0", torch.bfloat16
+    if torch.backends.mps.is_available():
+        return "mps", torch.float16
     return "cpu", torch.float32
 
 

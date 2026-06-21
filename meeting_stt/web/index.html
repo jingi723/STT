@@ -77,7 +77,7 @@
         <button id="btnRec" class="rec" onclick="startRec()">● 녹음 시작</button>
         <button id="btnStop" class="ghost" onclick="stopRec()" disabled>■ 정지</button>
       </div>
-      <p class="hint">녹음 경과: <span id="elapsed">0초</span></p>
+      <p class="hint">녹음 경과: <span id="elapsed">0:00:00</span></p>
     </div>
 
     <div class="panel">
@@ -127,6 +127,8 @@ let timer = null, startMs = null;
 
 function showErr(msg){ document.getElementById('error').textContent = msg ? ('⚠ ' + msg) : ''; }
 function setStatus(text, cls){ const s=document.getElementById('status'); s.textContent=text; s.className='badge '+cls; }
+
+function hms(sec){ sec=Math.round(sec||0); const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
 
 async function api(path, opts){
   const r = await fetch(path, opts);
@@ -181,7 +183,7 @@ async function loadApps(){
   }catch(e){ showErr('앱 목록 실패: '+e.message); }
 }
 
-function tick(){ const s=Math.floor((Date.now()-startMs)/1000); document.getElementById('elapsed').textContent = s+'초'; }
+function tick(){ document.getElementById('elapsed').textContent = hms((Date.now()-startMs)/1000); }
 
 async function startRec(){
   showErr('');
@@ -206,7 +208,7 @@ async function stopRec(){
     document.getElementById('btnRec').disabled = false;
     document.getElementById('btnStop').disabled = true;
     document.getElementById('btnTrans').disabled = false;
-    setStatus('녹음 완료 ('+duration_sec+'초)', 'idle');
+    setStatus('녹음 완료 ('+hms(duration_sec)+')', 'idle');
   }catch(e){ showErr('정지 실패: '+e.message); }
 }
 
@@ -225,7 +227,7 @@ async function transcribe(){
   try{
     const data = await api('/api/transcribe', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     lastTranscriptJson = data._json_path;
-    const lines = (data.segments||[]).map(s=>`[${s.speaker}] ${s.start.toFixed(1)}s~${s.end.toFixed(1)}s: ${s.text}`);
+    const lines = (data.segments||[]).map(s=>`[${s.speaker}] ${hms(s.start)}~${hms(s.end)}: ${s.text}`);
     document.getElementById('transcript').textContent = lines.join('\n') || '(빈 결과)';
     document.getElementById('btnNotes').disabled = false;
     document.getElementById('btnPrompt').disabled = false;

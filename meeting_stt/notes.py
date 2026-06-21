@@ -8,14 +8,16 @@ from typing import Dict, List
 
 
 def format_transcript_text(data: dict) -> str:
-    """transcript json -> 사람이 읽는 화자 귀속 텍스트."""
+    """transcript json -> 사람이 읽는 화자 귀속 텍스트. 타임스탬프는 시:분:초."""
+    from .config import hms
+
     lines: List[str] = []
     for seg in data.get("segments", []):
         spk = seg.get("speaker", "SPEAKER")
         start = seg.get("start", 0.0)
         end = seg.get("end", 0.0)
         text = seg.get("text", "").strip()
-        lines.append(f"[{spk}] {start:.1f}s~{end:.1f}s: {text}")
+        lines.append(f"[{spk}] {hms(start)}~{hms(end)}: {text}")
     return "\n".join(lines)
 
 
