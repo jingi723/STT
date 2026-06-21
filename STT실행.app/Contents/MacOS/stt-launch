@@ -1,0 +1,4 @@
+#!/bin/bash
+# .app 위치 기준으로 프로젝트 루트(상위)에서 런처 실행
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+open "$DIR/STT실행.command"
