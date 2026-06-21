@@ -1,6 +1,10 @@
-.claude/
+# 로컬 설정/비밀
+.claude/settings.local.json
 keys.json
 .env
+.DS_Store
+
+# 가상환경
 .venv/
 venv/
 STT_env/
@@ -11,7 +15,7 @@ __pycache__/
 *.pyd
 *.egg-info/
 
-# Local media and generated artifacts
+# 로컬 미디어 / 생성 산출물
 *.mp3
 *.wav
 *.m4a
@@ -24,3 +28,8 @@ __pycache__/
 outputs/
 models/
 checkpoints/
+
+# 네이티브 헬퍼 빌드 산출물 (build.sh로 재생성)
+native/apptap
+native/_CodeSignature/
+*.swiftmodule
