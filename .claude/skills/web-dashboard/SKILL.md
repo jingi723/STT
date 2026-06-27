@@ -1,11 +1,11 @@
 ---
 name: web-dashboard
-description: 로컬 웹 대시보드(FastAPI 백엔드 + 브라우저 UI)를 구현/수정할 때 사용. server.py 라우트, web/index.html 프론트, 장치 선택·녹음 제어·전사·회의록 보기, dashboard CLI 서브커맨드 작업 시 반드시 이 스킬을 따른다.
+description: 로컬 웹 대시보드(FastAPI 백엔드 + 브라우저 UI)를 구현/수정할 때 사용. server.py 라우트, web/index.html 프론트, 장치 선택·녹음 세션 저장·재생·미전사 목록·나중 전사·회의록 보기, dashboard CLI 서브커맨드 작업 시 반드시 이 스킬을 따른다.
 ---
 
 # Web Dashboard 구현 스킬
 
-`meeting_stt/server.py` + `meeting_stt/web/index.html` — localhost에서 뜨는 대시보드. 녹음·장치선택·전사·회의록 보기를 한 화면에서.
+`meeting_stt/server.py` + `meeting_stt/web/index.html` — localhost에서 뜨는 대시보드. 녹음·장치선택·저장된 녹음 재생·나중 전사·회의록 보기를 한 화면에서.
 
 ## 구성
 - 백엔드 FastAPI가 녹음(`capture`)·전사(`pipeline`)·회의록(`notes`)을 수행.
@@ -23,14 +23,18 @@ fastapi/uvicorn은 모듈 최상단이 아니라 `create_app()`·`run_server()` 
 |--------|------|------|
 | GET | `/` | `web/index.html` 서빙 |
 | GET | `/api/devices` | `capture.list_input_devices()` |
-| POST | `/api/record/start` | body `{device}` → 녹음 시작 |
-| POST | `/api/record/stop` | 정지·wav 저장 → `{path}` |
-| POST | `/api/transcribe` | body `{path, context, num_speakers, diarize}` → `pipeline.transcribe` 결과 |
+| POST | `/api/record/start` | body `{device, source}` → 세션 디렉터리 생성 후 녹음 시작 |
+| POST | `/api/record/stop` | 정지·`audio.wav`/`metadata.json` 확정 → 세션 정보 |
+| GET | `/api/recordings` | `outputs/recordings/{timestamp_slug}/` 세션 목록, 전사 여부, 재생 URL |
+| GET | `/api/recordings/{session_id}/audio` | 저장된 `audio.wav` 스트리밍/다운로드 |
+| POST | `/api/transcribe` | body `{session_id}` 또는 `{path, context, num_speakers, diarize}` → `pipeline.transcribe` 결과 |
 | POST | `/api/notes` | body `{transcript_json, project, prompt_only}` → `notes` 산출 |
 | GET | `/api/results` | `outputs/` 산출물 목록 |
 
 ## 상태 관리
-- 녹음 상태는 서버 프로세스가 단일 `Recorder` 인스턴스로 보유.
+- 녹음 상태는 서버 프로세스가 단일 활성 `Recorder` 인스턴스로 보유.
+- 녹음 시작 시 `outputs/recordings/{timestamp_slug}/`를 만들고, 오디오는 그 안의 `audio.wav`, 메타데이터는 `metadata.json`에 둔다.
+- 녹음 목록은 디스크를 기준으로 재구성하여 서버 재시작·네트워크 끊김 후에도 재생과 전사가 가능해야 한다. transcript/json 산출물이 없으면 "미전사"로 표시한다.
 - start 중복 호출 → 409, stop인데 미시작 → 400. 명확한 JSON 에러.
 - 전사는 동기로 오래 걸릴 수 있음(CPU). 프론트는 "처리 중" 표시 후 응답 대기. (스트리밍은 후속 확장.)
 
@@ -38,6 +42,7 @@ fastapi/uvicorn은 모듈 최상단이 아니라 `create_app()`·`run_server()` 
 - 장치 드롭다운(새로고침 버튼) — 시스템 오디오 안내 문구(BlackHole) 포함.
 - context 키워드 입력(쉼표 구분 — asr-diarization 규칙 그대로), 화자 수 입력, 화자분리 토글.
 - 녹음/정지 버튼 + 경과 시간, 상태 배지.
+- 저장된 녹음 목록: 재생 `<audio>`, 전사 여부 배지, 미전사 세션의 "전사" 버튼.
 - 전사 결과(화자 귀속 텍스트) 패널, 회의록 생성 버튼(로컬/프롬프트), 결과 markdown 표시.
 - 에러는 화면에 노출(조용히 삼키지 않음).
 

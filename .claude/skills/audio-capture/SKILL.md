@@ -1,6 +1,6 @@
 ---
 name: audio-capture
-description: 오프라인 오디오 캡처(입력 장치 열거·선택, start/stop 녹음, wav 저장)를 구현/수정할 때 사용. capture.py, sounddevice 기반 녹음, 마이크 및 시스템/앱 오디오(BlackHole) 장치 선택 작업 시 반드시 이 스킬을 따른다.
+description: 오프라인 오디오 캡처(입력 장치 열거·선택, start/stop 녹음, 세션 audio.wav 저장)를 구현/수정할 때 사용. capture.py, sounddevice 기반 녹음, 마이크 및 시스템/앱 오디오(BlackHole) 장치 선택, 대시보드 persistent recording session 작업 시 반드시 이 스킬을 따른다.
 ---
 
 # Audio Capture 구현 스킬
@@ -39,4 +39,4 @@ class Recorder:
 - 장치 미지원 설정은 `sounddevice.PortAudioError`를 잡아 "이 장치는 X Hz/모노를 지원하지 않습니다"로 안내.
 
 ## 산출물 경로
-녹음 wav는 `outputs/recordings/{timestamp}.wav` 권장. timestamp는 호출측(서버)에서 주입(스크립트 내 Date.now류 금지 — 서버가 생성).
+녹음 wav는 호출자가 넘긴 경로에만 저장한다. 대시보드는 `outputs/recordings/{timestamp_slug}/audio.wav`를 넘기고 같은 디렉터리에 `metadata.json`을 둔다. `capture.py`는 timestamp slug, 세션 디렉터리, metadata를 만들지 않는다.

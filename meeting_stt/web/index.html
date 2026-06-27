@@ -35,6 +35,24 @@
   .checkbox-row { display:flex; align-items:center; gap:8px; margin-top:10px; }
   .checkbox-row input { width:auto; }
   .checkbox-row label { margin:0; }
+  .hb-row { display:flex; align-items:center; gap:10px; margin-top:12px; }
+  .hb-dot { width:12px; height:12px; border-radius:50%; background:var(--muted); flex:0 0 auto; transition:background .2s; }
+  .hb-dot.beat { animation:beat .4s ease-out; }
+  @keyframes beat { 0%{ transform:scale(1); } 30%{ transform:scale(1.7); } 100%{ transform:scale(1); } }
+  .vu-track { flex:1; height:10px; background:#0d1117; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .vu-fill { height:100%; width:0%; background:var(--accent); border-radius:6px; transition:width .12s linear, background .2s; }
+  .recordings-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .recordings-head h3 { margin:0; }
+  .recordings-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height:210px; overflow:auto; }
+  .recording-item { width:100%; text-align:left; background:#0d1117; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:10px; font-weight:500; }
+  .recording-item.selected { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .recording-title { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .recording-meta { color:var(--muted); font-size:12px; margin-top:4px; font-weight:400; }
+  .status-dot { flex:0 0 auto; border-radius:20px; padding:2px 7px; font-size:11px; }
+  .status-dot.done { background:#183a24; color:#7ee787; }
+  .status-dot.todo { background:#3b2300; color:#ffcc66; }
+  audio { width:100%; margin-top:10px; }
+  .empty { color:var(--muted); font-size:13px; padding:10px 0; }
 </style>
 </head>
 <body>
@@ -50,6 +68,7 @@
       <label>소스 종류</label>
       <select id="sourceType" onchange="onSourceChange()">
         <option value="device">🎙️ 마이크 / 입력 장치</option>
+        <option value="system">🔊 시스템 전체 출력 (스피커 소리)</option>
         <option value="app">🖥️ 앱 오디오 (특정 앱 소리)</option>
       </select>
 
@@ -69,6 +88,10 @@
         </div>
         <p class="hint" id="appHint">웹미팅(Zoom/Meet 등)을 선택하면 그 앱 소리만 녹음됩니다. 들으면서 녹음돼요(라우팅 불필요).</p>
       </div>
+
+      <div id="systemBlock" style="display:none;">
+        <p class="hint">스피커로 나가는 모든 소리를 통째로 녹음합니다. 앱을 고를 필요가 없어요. 최초 1회 '오디오 녹음' 권한 허용이 필요합니다.</p>
+      </div>
     </div>
 
     <div class="panel">
@@ -77,11 +100,32 @@
         <button id="btnRec" class="rec" onclick="startRec()">● 녹음 시작</button>
         <button id="btnStop" class="ghost" onclick="stopRec()" disabled>■ 정지</button>
       </div>
-      <p class="hint">녹음 경과: <span id="elapsed">0:00:00</span></p>
+      <div class="hb-row">
+        <span id="hbDot" class="hb-dot"></span>
+        <div class="vu-track"><div id="vuFill" class="vu-fill"></div></div>
+      </div>
+      <p class="hint">녹음 경과: <span id="elapsed">0:00:00</span> · 기록량: <span id="recBytes">0KB</span></p>
+      <p id="noSignal" class="err" style="display:none;">⚠ 소리가 들어오지 않습니다 — 출력 소스/권한을 확인하세요</p>
     </div>
 
+
     <div class="panel">
-      <h3>3. 전사 옵션</h3>
+      <div class="recordings-head">
+        <h3>3. 저장된 녹음</h3>
+        <button class="ghost" style="flex:0 0 auto;" onclick="loadRecordings()">새로고침</button>
+      </div>
+      <p class="hint">서버를 다시 시작해도 outputs/recordings 세션을 불러와 재생·전사할 수 있습니다.</p>
+      <div id="recordingList" class="recordings-list">
+        <div class="empty">녹음 목록을 불러오는 중입니다.</div>
+      </div>
+      <div id="recordingDetails" style="display:none;margin-top:12px;">
+        <audio id="recordingAudio" controls preload="metadata"></audio>
+        <p id="recordingMeta" class="hint"></p>
+        <button class="primary" style="width:100%;margin-top:10px;" id="btnTransSaved" onclick="transcribe()" disabled>선택 녹음 전사 ▶</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>4. 전사 옵션</h3>
       <label>context 키워드 (쉼표 구분)</label>
       <input id="context" type="text" placeholder="LLM-Wiki, Qwen3-ASR, 김상규" />
       <div class="row">
@@ -99,7 +143,7 @@
         <label for="diarize">화자분리 사용</label>
       </div>
       <button class="primary" style="width:100%;margin-top:14px;" id="btnTrans" onclick="transcribe()" disabled>전사 실행 ▶</button>
-      <p class="hint">정지하면 마지막 녹음을 자동으로 전사 대상에 올립니다. CPU 환경은 다소 시간이 걸립니다.</p>
+      <p class="hint">녹음을 정지하거나 목록에서 선택하면 전사 대상에 올라갑니다. CPU 환경은 다소 시간이 걸립니다.</p>
     </div>
   </section>
 
@@ -123,10 +167,16 @@
 <script>
 let lastWav = null;        // 정지 후 wav 경로
 let lastTranscriptJson = null;
-let timer = null, startMs = null;
+let pollTimer = null;      // /api/record/status 폴링 인터벌
+let lastBytes = 0;         // 직전 폴링 bytes(정체 감지용)
+let staleCount = 0;        // 무신호 연속 폴링 횟수
+let recordings = [];        // 저장된 녹음 세션 목록
+let selectedRecording = null;
+let transcribing = false;
 
 function showErr(msg){ document.getElementById('error').textContent = msg ? ('⚠ ' + msg) : ''; }
 function setStatus(text, cls){ const s=document.getElementById('status'); s.textContent=text; s.className='badge '+cls; }
+function setText(id, text){ document.getElementById(id).textContent = text; }
 
 function hms(sec){ sec=Math.round(sec||0); const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
 
@@ -140,10 +190,11 @@ async function api(path, opts){
 function sourceType(){ return document.getElementById('sourceType').value; }
 
 function onSourceChange(){
-  const isApp = sourceType()==='app';
-  document.getElementById('deviceBlock').style.display = isApp ? 'none' : 'block';
-  document.getElementById('appBlock').style.display = isApp ? 'block' : 'none';
-  if(isApp) loadApps();
+  const src = sourceType();
+  document.getElementById('deviceBlock').style.display = src==='device' ? 'block' : 'none';
+  document.getElementById('appBlock').style.display = src==='app' ? 'block' : 'none';
+  document.getElementById('systemBlock').style.display = src==='system' ? 'block' : 'none';
+  if(src==='app') loadApps();
 }
 
 async function loadDevices(){
@@ -183,42 +234,204 @@ async function loadApps(){
   }catch(e){ showErr('앱 목록 실패: '+e.message); }
 }
 
-function tick(){ document.getElementById('elapsed').textContent = hms((Date.now()-startMs)/1000); }
+function fmtBytes(b){ b = b||0; return b >= 1e6 ? (b/1e6).toFixed(1)+'MB' : Math.round(b/1024)+'KB'; }
+
+function recordingKey(r){ return String(r.id || r.session_id || r.path || r.audio_path || ''); }
+function recordingPath(r){ return r.path || r.audio_path || null; }
+function recordingAudioUrl(r){ return r.audio_url || null; }
+function isTranscribed(r){ return !!(r && (r.transcribed || r.transcript_json || r.status === 'transcribed')); }
+function recordingTitle(r){
+  const key = recordingKey(r);
+  if(r.name) return r.name;
+  if(r.created_at) return r.created_at;
+  if(key) return key.split('/').filter(Boolean).pop();
+  return '녹음 세션';
+}
+function recordingMeta(r){
+  const bits = [];
+  if(r.duration_sec != null) bits.push(hms(r.duration_sec));
+  const p = recordingPath(r);
+  if(p) bits.push(p);
+  return bits.join(' · ') || 'metadata.json 없음';
+}
+function setTranscribeButtons(){
+  const disabled = transcribing || !selectedRecording || !recordingPath(selectedRecording);
+  document.getElementById('btnTrans').disabled = disabled;
+  const saved = document.getElementById('btnTransSaved');
+  saved.disabled = disabled;
+  saved.textContent = isTranscribed(selectedRecording) ? '선택 녹음 다시 전사 ▶' : '선택 녹음 전사 ▶';
+}
+function renderRecordingList(){
+  const list = document.getElementById('recordingList');
+  list.textContent = '';
+  if(!recordings.length){
+    selectedRecording = null;
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = '저장된 녹음이 없습니다.';
+    list.appendChild(empty);
+    renderSelectedRecording();
+    return;
+  }
+  const selectedKey = selectedRecording ? recordingKey(selectedRecording) : '';
+  for(const rec of recordings){
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'recording-item' + (recordingKey(rec) === selectedKey ? ' selected' : '');
+    item.onclick = () => selectRecording(recordingKey(rec));
+
+    const title = document.createElement('div');
+    title.className = 'recording-title';
+    const name = document.createElement('span');
+    name.textContent = recordingTitle(rec);
+    const status = document.createElement('span');
+    status.className = 'status-dot ' + (isTranscribed(rec) ? 'done' : 'todo');
+    status.textContent = isTranscribed(rec) ? '전사됨' : '미전사';
+    title.appendChild(name);
+    title.appendChild(status);
+
+    const meta = document.createElement('div');
+    meta.className = 'recording-meta';
+    meta.textContent = recordingMeta(rec);
+
+    item.appendChild(title);
+    item.appendChild(meta);
+    list.appendChild(item);
+  }
+}
+function renderSelectedRecording(){
+  const panel = document.getElementById('recordingDetails');
+  const audio = document.getElementById('recordingAudio');
+  if(!selectedRecording){
+    panel.style.display = 'none';
+    audio.removeAttribute('src');
+    audio.load();
+    lastTranscriptJson = null;
+    document.getElementById('btnNotes').disabled = true;
+    document.getElementById('btnPrompt').disabled = true;
+    setTranscribeButtons();
+    return;
+  }
+  const src = recordingAudioUrl(selectedRecording);
+  if(src){ audio.src = src; }
+  else{ audio.removeAttribute('src'); }
+  audio.load();
+  setText('recordingMeta', `${isTranscribed(selectedRecording) ? '전사됨' : '미전사'} · ${recordingMeta(selectedRecording)}`);
+  panel.style.display = 'block';
+  lastWav = recordingPath(selectedRecording);
+  lastTranscriptJson = selectedRecording.transcript_json || selectedRecording._json_path || null;
+  document.getElementById('btnNotes').disabled = !lastTranscriptJson;
+  document.getElementById('btnPrompt').disabled = !lastTranscriptJson;
+  setTranscribeButtons();
+}
+function selectRecording(key){
+  selectedRecording = recordings.find(r => recordingKey(r) === key) || null;
+  renderRecordingList();
+  renderSelectedRecording();
+  if(selectedRecording){
+    document.getElementById('transcript').textContent = lastTranscriptJson ? ('전사 JSON: ' + lastTranscriptJson) : '선택한 녹음은 아직 전사되지 않았습니다.';
+  }
+}
+async function loadRecordings(preferredKey, preferredPath){
+  try{
+    const data = await api('/api/recordings');
+    recordings = data.recordings || data.sessions || [];
+    const currentKey = selectedRecording ? recordingKey(selectedRecording) : '';
+    const target = String(preferredKey || '') || (preferredPath ? String(preferredPath) : '') || currentKey;
+    selectedRecording = recordings.find(r => recordingKey(r) === target || recordingPath(r) === target || r.audio_path === target) || recordings[0] || null;
+    renderRecordingList();
+    renderSelectedRecording();
+  }catch(e){
+    recordings = [];
+    selectedRecording = null;
+    renderRecordingList();
+    showErr('녹음 목록 실패: '+e.message);
+  }
+}
+
+function resetHeartbeat(){
+  document.getElementById('vuFill').style.width = '0%';
+  document.getElementById('hbDot').className = 'hb-dot';
+  document.getElementById('noSignal').style.display = 'none';
+  document.getElementById('recBytes').textContent = '0KB';
+  document.getElementById('elapsed').textContent = '0:00:00';
+  lastBytes = 0; staleCount = 0;
+}
+
+async function pollStatus(){
+  let st;
+  try{ st = await api('/api/record/status'); }
+  catch(e){ return; }  // status는 조용히(폴링이라 잡음 방지)
+  if(!st.recording){ return; }
+
+  document.getElementById('elapsed').textContent = hms(st.elapsed_sec);
+  document.getElementById('recBytes').textContent = fmtBytes(st.bytes);
+
+  // VU 바: 약간 부스트하여 채움, 레벨별 색
+  const lv = st.level || 0;
+  document.getElementById('vuFill').style.width = Math.min(100, lv*140) + '%';
+  document.getElementById('vuFill').style.background = lv < 0.1 ? 'var(--accent)' : (lv < 0.3 ? '#a5e75a' : '#e3c000');
+
+  // 박동 점: 신호가 흐르면(레벨 또는 bytes 증가) beat 1회 재생
+  const flowing = lv > 0.005 || st.bytes > lastBytes;
+  const dot = document.getElementById('hbDot');
+  if(flowing){
+    dot.classList.remove('beat'); void dot.offsetWidth; dot.classList.add('beat');
+    dot.style.background = 'var(--rec)';
+    staleCount = 0;
+    document.getElementById('noSignal').style.display = 'none';
+  }else{
+    dot.classList.remove('beat');
+    dot.style.background = 'var(--muted)';
+    staleCount++;
+    if(staleCount >= 8){ document.getElementById('noSignal').style.display = 'block'; }
+  }
+  lastBytes = st.bytes;
+}
 
 async function startRec(){
   showErr('');
   const src = sourceType();
-  const body = src==='app'
-    ? {source:'app', pid: parseInt(document.getElementById('app').value)}
-    : {source:'device', device: parseInt(document.getElementById('device').value)};
+  let body;
+  if(src==='app') body = {source:'app', pid: parseInt(document.getElementById('app').value)};
+  else if(src==='system') body = {source:'system'};
+  else body = {source:'device', device: parseInt(document.getElementById('device').value)};
   try{
     await api('/api/record/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     document.getElementById('btnRec').disabled = true;
     document.getElementById('btnStop').disabled = false;
     setStatus('녹음 중', 'live');
-    startMs = Date.now(); timer = setInterval(tick, 500);
+    resetHeartbeat();
+    if(pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(pollStatus, 400);
   }catch(e){ showErr('녹음 시작 실패: '+e.message); }
 }
 
 async function stopRec(){
   try{
-    const {path, duration_sec} = await api('/api/record/stop', {method:'POST'});
-    clearInterval(timer);
-    lastWav = path;
+    const data = await api('/api/record/stop', {method:'POST'});
+    const path = data.path || data.audio_path;
+    if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    resetHeartbeat();
+    lastWav = path || lastWav;
     document.getElementById('btnRec').disabled = false;
     document.getElementById('btnStop').disabled = true;
-    document.getElementById('btnTrans').disabled = false;
-    setStatus('녹음 완료 ('+hms(duration_sec)+')', 'idle');
+    setStatus('녹음 완료 ('+hms(data.duration_sec)+')', 'idle');
+    await loadRecordings(data.session_id || data.id, path);
   }catch(e){ showErr('정지 실패: '+e.message); }
 }
 
 async function transcribe(){
-  if(!lastWav){ showErr('녹음 파일이 없습니다.'); return; }
+  const rec = selectedRecording;
+  const path = rec ? recordingPath(rec) : lastWav;
+  if(!path){ showErr('녹음 파일이 없습니다.'); return; }
   showErr('');
   setStatus('전사 중…', 'busy');
-  document.getElementById('btnTrans').disabled = true;
+  transcribing = true;
+  setTranscribeButtons();
   const body = {
-    path: lastWav,
+    path,
+    session_id: rec ? (rec.session_id || rec.id || null) : null,
     context: document.getElementById('context').value || null,
     num_speakers: parseInt(document.getElementById('numSpk').value) || null,
     diarize: document.getElementById('diarize').checked,
@@ -226,14 +439,24 @@ async function transcribe(){
   };
   try{
     const data = await api('/api/transcribe', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-    lastTranscriptJson = data._json_path;
+    lastWav = data.audio_path || data.path || path;
+    lastTranscriptJson = data._json_path || data.transcript_json || lastTranscriptJson;
+    if(selectedRecording){
+      selectedRecording.transcribed = true;
+      selectedRecording.status = 'transcribed';
+      selectedRecording.transcript_json = lastTranscriptJson;
+      selectedRecording.transcript_md = data._md_path || data.transcript_md;
+    }
     const lines = (data.segments||[]).map(s=>`[${s.speaker}] ${hms(s.start)}~${hms(s.end)}: ${s.text}`);
     document.getElementById('transcript').textContent = lines.join('\n') || '(빈 결과)';
-    document.getElementById('btnNotes').disabled = false;
-    document.getElementById('btnPrompt').disabled = false;
+    document.getElementById('btnNotes').disabled = !lastTranscriptJson;
+    document.getElementById('btnPrompt').disabled = !lastTranscriptJson;
+    renderRecordingList();
+    renderSelectedRecording();
     setStatus('전사 완료', 'idle');
+    await loadRecordings(selectedRecording ? recordingKey(selectedRecording) : null, lastWav);
   }catch(e){ showErr('전사 실패: '+e.message); setStatus('오류', 'idle'); }
-  finally{ document.getElementById('btnTrans').disabled = false; }
+  finally{ transcribing = false; setTranscribeButtons(); }
 }
 
 async function makeNotes(promptOnly){
@@ -247,6 +470,7 @@ async function makeNotes(promptOnly){
 }
 
 loadDevices();
+loadRecordings();
 </script>
 </body>
 </html>

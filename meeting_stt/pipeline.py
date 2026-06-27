@@ -68,7 +68,7 @@ def transcribe(
 
     config = config or Config.from_cwd()
     device, dtype = resolve_device_dtype()  # ASR 디바이스(MPS 우선)
-    stem = Path(audio_path).stem
+    stem = Path(audio_path).parent.name if Path(audio_path).name == "audio.wav" else Path(audio_path).stem
     config.outputs_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[1/3] 오디오 로딩: {audio_path}")

@@ -1,6 +1,6 @@
 ---
 name: stt-build-orchestrator
-description: STT 회의록 자동화 프로그램(meeting_stt)을 구현·수정·재실행할 때 사용하는 오케스트레이터. "STT 프로그램 만들어/구현해", "회의록 파이프라인 구현", "ASR/화자분리/회의록 코드 작성·수정", "다시 실행/재실행/업데이트/보완", "전사·요약 기능 추가" 등의 요청 시 반드시 이 스킬로 에이전트 팀을 구성해 처리한다. 단순 개념 질문은 직접 응답 가능.
+description: STT 회의록 자동화 프로그램(meeting_stt)을 구현·수정·재실행할 때 사용하는 오케스트레이터. "STT 프로그램 만들어/구현해", "회의록 파이프라인 구현", "ASR/화자분리/회의록 코드 작성·수정", "대시보드 녹음 세션/재생/나중 전사", "다시 실행/재실행/업데이트/보완", "전사·요약 기능 추가" 등의 요청 시 반드시 이 스킬로 에이전트 팀을 구성해 처리한다. 단순 개념 질문은 직접 응답 가능.
 ---
 
 # STT Build Orchestrator
@@ -12,7 +12,7 @@ description: STT 회의록 자동화 프로그램(meeting_stt)을 구현·수정
 ## 범위 고정
 - ASR: **Qwen3-ASR-1.7B 단일**(Whisper 제외). 화자분리: pyannote.
 - 산출물: `meeting_stt/` 패키지 + CLI + 로컬 웹 대시보드 + `LLM-Wiki/` 스캐폴딩.
-- 대시보드: 로컬 웹(FastAPI + 브라우저 UI). 녹음은 백엔드가 수행. 두 소스: (1) 마이크/입력 장치(`sounddevice`), (2) 앱별 오디오(네이티브 `native/apptap`, Core Audio Process Tap, macOS 14.2+). 전사 타이밍은 녹음 후 전사(준실시간은 후속 확장).
+- 대시보드: 로컬 웹(FastAPI + 브라우저 UI). 녹음은 백엔드가 수행하고 `outputs/recordings/{timestamp_slug}/` 세션마다 `audio.wav`+`metadata.json`으로 즉시 저장한다. 두 소스: (1) 마이크/입력 장치(`sounddevice`), (2) 앱별 오디오(네이티브 `native/apptap`, Core Audio Process Tap, macOS 14.2+). 전사는 녹음 후 즉시 또는 저장된 미전사 세션에서 나중에 실행한다.
 - 앱별 캡처는 TCC 오디오 권한 필요 — 코드 우회 금지, 권한 안내로 처리(native-audio-capture 스킬).
 
 ## Phase 0: 컨텍스트 확인
@@ -30,8 +30,8 @@ description: STT 회의록 자동화 프로그램(meeting_stt)을 구현·수정
 설계 확정 후 팀을 구성한다. 작업 범위에 따라 필요한 엔지니어만 호출한다.
 - `asr-engineer`(opus, general-purpose) → `audio.py`/`asr.py`/`diarize.py`. **asr-diarization 스킬** 적용.
 - `pipeline-engineer`(opus, general-purpose) → `pipeline.py`/`wiki.py`/`notes.py`/`cli.py`. **meeting-pipeline 스킬** 적용.
-- `audio-capture-engineer`(opus, general-purpose) → `capture.py`. **audio-capture 스킬** 적용. (대시보드/녹음 작업 시)
-- `dashboard-engineer`(opus, general-purpose) → `server.py`/`web/index.html` + CLI `dashboard`. **web-dashboard 스킬** 적용. (대시보드 작업 시)
+- `audio-capture-engineer`(opus, general-purpose) → `capture.py`. **audio-capture 스킬** 적용. 호출자가 넘긴 세션 `audio.wav` 경로에 저장한다. (대시보드/녹음 작업 시)
+- `dashboard-engineer`(opus, general-purpose) → `server.py`/`web/index.html` + CLI `dashboard`. **web-dashboard 스킬** 적용. 세션 목록·재생 URL·미전사 표시·나중 전사를 포함한다. (대시보드 작업 시)
 - 엔지니어들은 SendMessage로 모듈 시그니처를 조율한다(경계면 불일치 방지). 대시보드는 `capture`·`pipeline`·`notes`를 재사용하므로 중복 구현 금지.
 
 ## Phase 3: 검증 (점진적)

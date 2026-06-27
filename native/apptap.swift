@@ -1,8 +1,13 @@
-// apptap — macOS 앱별 오디오 캡처 헬퍼 (Core Audio Process Tap, macOS 14.2+)
+// apptap — macOS 앱별 / 시스템 전체 오디오 캡처 헬퍼 (Core Audio Process Tap, macOS 14.2+)
 //
 // 사용:
-//   apptap list                         # 오디오 프로세스 목록(JSON)
-//   apptap record --pid N --out f.wav   # PID 오디오 녹음 (SIGINT/SIGTERM에 finalize)
+//   apptap list                          # 오디오 프로세스 목록(JSON)
+//   apptap record --pid N --out f.wav    # PID 오디오 녹음 (SIGINT/SIGTERM에 finalize)
+//   apptap record-system --out f.wav     # 시스템 전체 출력 믹스 녹음 (SIGINT/SIGTERM에 finalize)
+//
+// record / record-system 둘 다 실시간 레벨(RMS)을 stdout에 약 200ms마다 한 줄로 출력:
+//   LEVEL <float>\n        # 예: "LEVEL 0.012300"  (무음이면 "LEVEL 0.0")
+// stderr에는 기존 시작 로그를 유지한다.
 //
 // 빌드:
 //   swiftc -O native/apptap.swift -o native/apptap \
@@ -89,23 +94,46 @@ final class Recorder {
     var extFile: ExtAudioFileRef?
     var asbd = AudioStreamBasicDescription()
 
+    // 실시간 레벨(RMS) 누적 — IOProc(실시간 스레드)와 메인 타이머가 공유.
+    // os_unfair_lock으로 짧게 보호한다(IOProc에서 락 보유 최소화).
+    var levelLock = os_unfair_lock_s()
+    var sumSquares: Double = 0
+    var sampleCount: UInt64 = 0
+
     func fail(_ msg: String) -> Never {
         FileHandle.standardError.write(("[apptap] " + msg + "\n").data(using: .utf8)!)
         cleanup()
         exit(1)
     }
 
+    // 앱(pid) 탭 녹음 시작.
     func start(pid: pid_t, outPath: String) {
         guard let procObj = processObject(forPID: pid) else {
             fail("PID \(pid)의 오디오 프로세스를 찾을 수 없습니다. 그 앱이 소리를 내고 있나요?")
         }
-
-        // 1) Process Tap 생성 (들으면서 캡처: .unmuted)
+        // Process Tap 생성 (들으면서 캡처: .unmuted)
         let tapDesc = CATapDescription(stereoMixdownOfProcesses: [procObj])
         tapDesc.uuid = UUID()
         tapDesc.muteBehavior = .unmuted
         tapDesc.name = "meeting_stt tap \(pid)"
         tapDesc.isPrivate = true
+        startWithTap(tapDesc, outPath: outPath, label: "pid \(pid)")
+    }
+
+    // 시스템 전체 출력 믹스 탭 녹음 시작 (pid 불필요).
+    func startGlobal(outPath: String) {
+        // 전역 탭: 모든 프로세스 출력 믹스를 스테레오로 캡처(제외 목록 비움).
+        let tapDesc = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+        tapDesc.uuid = UUID()
+        tapDesc.muteBehavior = .unmuted
+        tapDesc.name = "meeting_stt system tap"
+        tapDesc.isPrivate = true
+        startWithTap(tapDesc, outPath: outPath, label: "system")
+    }
+
+    // 탭 생성 이후 공통 경로: 포맷 읽기 → aggregate → wav → IOProc → start.
+    private func startWithTap(_ tapDesc: CATapDescription, outPath: String, label: String) {
+        // 1) Process Tap 생성
         var st = AudioHardwareCreateProcessTap(tapDesc, &tapID)
         if st != noErr || tapID == kAudioObjectUnknown {
             fail("Process Tap 생성 실패(OSStatus \(st)). 시스템 설정 > 개인정보 보호 > 오디오 녹음에서 터미널 권한을 허용하세요.")
@@ -164,7 +192,20 @@ final class Recorder {
         st = AudioDeviceStart(aggID, procID)
         if st != noErr { fail("녹음 시작 실패(OSStatus \(st)).") }
 
-        FileHandle.standardError.write("[apptap] 녹음 시작 (pid \(pid), \(Int(asbd.mSampleRate))Hz, \(asbd.mChannelsPerFrame)ch) → \(outPath)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[apptap] 녹음 시작 (\(label), \(Int(asbd.mSampleRate))Hz, \(asbd.mChannelsPerFrame)ch) → \(outPath)\n".data(using: .utf8)!)
+    }
+
+    // 누적된 RMS를 한 줄로 stdout에 쓰고 누적값을 리셋한다(메인 타이머에서 호출).
+    func emitLevel() {
+        os_unfair_lock_lock(&levelLock)
+        let s = sumSquares
+        let c = sampleCount
+        sumSquares = 0
+        sampleCount = 0
+        os_unfair_lock_unlock(&levelLock)
+        let rms = c > 0 ? (s / Double(c)).squareRoot() : 0.0
+        let line = c > 0 ? String(format: "LEVEL %.6f\n", rms) : "LEVEL 0.0\n"
+        FileHandle.standardOutput.write(line.data(using: .utf8)!)
     }
 
     func cleanup() {
@@ -179,7 +220,8 @@ final class Recorder {
     }
 }
 
-// IOProc (전역 C 함수) — context에서 Recorder를 꺼내 ExtAudioFileWriteAsync
+// IOProc (전역 C 함수) — context에서 Recorder를 꺼내 wav 기록 + RMS 누적.
+// 실시간 스레드이므로 ExtAudioFileWriteAsync(실시간 안전)와 짧은 락만 사용한다.
 let ioProc: AudioDeviceIOProc = { (_, _, inInputData, _, _, _, context) -> OSStatus in
     guard let context = context else { return noErr }
     let rec = Unmanaged<Recorder>.fromOpaque(context).takeUnretainedValue()
@@ -189,6 +231,26 @@ let ioProc: AudioDeviceIOProc = { (_, _, inInputData, _, _, _, context) -> OSSta
     let firstSize = buffers.mBuffers.mDataByteSize
     let frames = firstSize / bytesPerFrame
     if frames == 0 { return noErr }
+
+    // RMS 누적 (Float32 인터리브 프레임 가정). 제곱합과 표본 수를 짧은 락 안에서 더한다.
+    if rec.asbd.mFormatID == kAudioFormatLinearPCM,
+       (rec.asbd.mFormatFlags & kAudioFormatFlagIsFloat) != 0,
+       let raw = buffers.mBuffers.mData {
+        let sampleCount = Int(firstSize) / MemoryLayout<Float32>.size
+        if sampleCount > 0 {
+            let ptr = raw.assumingMemoryBound(to: Float32.self)
+            var localSum: Double = 0
+            for i in 0..<sampleCount {
+                let v = Double(ptr[i])
+                localSum += v * v
+            }
+            os_unfair_lock_lock(&rec.levelLock)
+            rec.sumSquares += localSum
+            rec.sampleCount += UInt64(sampleCount)
+            os_unfair_lock_unlock(&rec.levelLock)
+        }
+    }
+
     return ExtAudioFileWriteAsync(ext, frames, inInputData)
 }
 
@@ -198,6 +260,28 @@ func argValue(_ name: String) -> String? {
     let args = CommandLine.arguments
     if let i = args.firstIndex(of: name), i + 1 < args.count { return args[i + 1] }
     return nil
+}
+
+// record / record-system 공통: 시그널 처리 + 200ms LEVEL 타이머 런루프.
+func runRecordLoop(_ rec: Recorder) {
+    // SIGINT/SIGTERM에 정리 후 종료
+    var keepRunning = true
+    let sigSrc = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+    sigSrc.setEventHandler { rec.cleanup(); keepRunning = false; exit(0) }
+    sigSrc.resume()
+    let sigSrc2 = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+    sigSrc2.setEventHandler { rec.cleanup(); keepRunning = false; exit(0) }
+    sigSrc2.resume()
+    signal(SIGTERM, SIG_IGN)
+    signal(SIGINT, SIG_IGN)
+
+    // 약 200ms마다 stdout에 LEVEL 한 줄(하트비트 신호원).
+    let levelTimer = DispatchSource.makeTimerSource(queue: .main)
+    levelTimer.schedule(deadline: .now() + 0.2, repeating: 0.2)
+    levelTimer.setEventHandler { rec.emitLevel() }
+    levelTimer.resume()
+
+    while keepRunning { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
 }
 
 let command = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ""
@@ -214,23 +298,15 @@ case "record":
     }
     let rec = Recorder()
     rec.start(pid: pid, outPath: out)
-    // SIGINT/SIGTERM에 정리 후 종료
-    let stop: @convention(c) (Int32) -> Void = { _ in
-        // 시그널 핸들러에서 직접 정리는 비안전하므로 플래그만 — 여기선 간단히 종료 처리
+    runRecordLoop(rec)
+case "record-system":
+    guard let out = argValue("--out") else {
+        FileHandle.standardError.write("사용: apptap record-system --out FILE.wav\n".data(using: .utf8)!); exit(2)
     }
-    signal(SIGINT, stop)
-    signal(SIGTERM, stop)
-    var keepRunning = true
-    let sigSrc = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-    sigSrc.setEventHandler { rec.cleanup(); keepRunning = false; exit(0) }
-    sigSrc.resume()
-    let sigSrc2 = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
-    sigSrc2.setEventHandler { rec.cleanup(); keepRunning = false; exit(0) }
-    sigSrc2.resume()
-    signal(SIGTERM, SIG_IGN)
-    signal(SIGINT, SIG_IGN)
-    while keepRunning { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
+    let rec = Recorder()
+    rec.startGlobal(outPath: out)
+    runRecordLoop(rec)
 default:
-    FileHandle.standardError.write("사용: apptap [list | record --pid N --out FILE.wav]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("사용: apptap [list | record --pid N --out FILE.wav | record-system --out FILE.wav]\n".data(using: .utf8)!)
     exit(2)
 }
