@@ -8,6 +8,8 @@ import-safe: fastapi/uvicorn은 create_app()/run_server() 내부에서 지연 im
 아니라 실제 클래스 객체여야 하기 때문이다(문자열이면 모듈 전역에서 못 찾아 422가 난다)."""
 
 import json
+import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -37,6 +39,9 @@ def create_app():
     app = FastAPI(title="meeting_stt dashboard")
     config = Config.from_cwd()
     state = _State()
+    # metadata.json은 여러 라우트가 read-modify-write 한다. FastAPI sync 라우트는 스레드풀에서
+    # 병렬 실행되므로, 세션 메타 갱신·삭제를 직렬화해 lost-update와 삭제된 폴더 부활을 막는다.
+    meta_lock = threading.Lock()
 
     class StartBody(BaseModel):
         source: str = "device"        # "device"(마이크/sounddevice) | "app"(앱별 캡처) | "system"(시스템 전체 출력)
@@ -65,6 +70,9 @@ def create_app():
         project: str | None = None
         prompt_only: bool = False
         wiki: str | None = None
+
+    class RenameBody(BaseModel):
+        name: str = ""
 
     def _recordings_dir() -> Path:
         path = config.outputs_dir / "recordings"
@@ -120,6 +128,7 @@ def create_app():
             "session_id": session_id,
             "id": session_id,
             "session_dir": str(session_dir),
+            "name": meta.get("name"),
             "audio_path": str(audio_path) if audio_exists else None,
             "path": str(audio_path) if audio_exists else None,
             "audio_url": f"/api/recordings/{session_id}/audio" if audio_exists else None,
@@ -137,13 +146,52 @@ def create_app():
             "transcript_md": str(transcript_md) if transcript_md.exists() else None,
         }
 
+    def _external_transcript_files(session_dir: Path, meta: dict) -> list[Path]:
+        """세션 폴더 밖에 있는 이 세션의 전사 산출물(.json/.md/.partial.json).
+        _recording_payload의 탐지 기준(메타 키 + outputs_dir 기본 경로)과 일치시켜 고아를 남기지 않는다.
+        outputs_dir 밖 경로는 방어적으로 제외(손상/외부 편집된 메타 대비)."""
+        session_id = session_dir.name
+        candidates = [
+            config.outputs_dir / f"{session_id}.json",
+            config.outputs_dir / f"{session_id}.md",
+            config.outputs_dir / f"{session_id}.partial.json",  # 중단된 전사 잔여물
+        ]
+        for key in ("transcript_json", "transcript_md"):
+            value = meta.get(key)
+            if value:
+                candidates.append(Path(value))
+        try:
+            outputs_root = config.outputs_dir.resolve()
+            session_root = session_dir.resolve()
+        except Exception:
+            return []
+        out: list[Path] = []
+        seen: set[Path] = set()
+        for p in candidates:
+            try:
+                rp = p.resolve()
+            except Exception:
+                continue
+            if rp in seen:
+                continue
+            seen.add(rp)
+            if rp.parent == session_root:
+                continue  # 폴더 통삭제에 포함됨
+            try:
+                rp.relative_to(outputs_root)  # outputs_dir 밖이면 건드리지 않음
+            except ValueError:
+                continue
+            out.append(p)
+        return out
+
     def _update_session_metadata(status: str, **fields) -> None:
         if state.session_dir is None:
             return
-        meta = _read_metadata(state.session_dir)
-        meta.update(fields)
-        meta["status"] = status
-        _write_metadata(state.session_dir, meta)
+        with meta_lock:
+            meta = _read_metadata(state.session_dir)
+            meta.update(fields)
+            meta["status"] = status
+            _write_metadata(state.session_dir, meta)
 
     @app.get("/")
     def index():
@@ -310,6 +358,67 @@ def create_app():
             raise HTTPException(404, "녹음 파일이 없습니다.")
         return FileResponse(str(audio_path), media_type="audio/wav", filename=f"{session_id}.wav")
 
+    @app.get("/api/recordings/{session_id}/transcript")
+    def recording_transcript(session_id: str):
+        """저장된 전사 결과(JSON, segments 포함)를 반환. 재시작 후에도 세션의 전사를 열람·복사할 수 있게 한다."""
+        session_dir = _session_dir(session_id)
+        if not session_dir.exists():
+            raise HTTPException(404, "녹음 세션이 없습니다.")
+        meta = _read_metadata(session_dir)
+        tj = meta.get("transcript_json")
+        jpath = Path(tj) if tj else config.outputs_dir / f"{session_id}.json"
+        if not jpath.exists():
+            raise HTTPException(404, "전사 결과가 없습니다.")
+        try:
+            data = json.loads(jpath.read_text(encoding="utf-8"))
+        except Exception as e:
+            raise HTTPException(500, f"전사 결과 읽기 실패: {e}")
+        data["_json_path"] = str(jpath)
+        return JSONResponse(data)
+
+    @app.post("/api/recordings/{session_id}/rename")
+    def rename_recording(session_id: str, body: RenameBody):
+        session_dir = _session_dir(session_id)
+        name = (body.name or "").strip()
+        with meta_lock:
+            if not session_dir.exists():  # 락 안에서 재확인 → 동시 삭제된 세션을 재생성하지 않음
+                raise HTTPException(404, "녹음 세션이 없습니다.")
+            meta = _read_metadata(session_dir)
+            if name:
+                meta["name"] = name
+            else:
+                meta.pop("name", None)  # 빈 문자열이면 이름 제거(기본 표시로 복귀)
+            _write_metadata(session_dir, meta)
+            payload = _recording_payload(session_dir)
+        return JSONResponse(payload)
+
+    @app.delete("/api/recordings/{session_id}")
+    def delete_recording(session_id: str):
+        session_dir = _session_dir(session_id)
+        if state.session_id == session_id and state.recorder is not None and getattr(state.recorder, "is_recording", False):
+            raise HTTPException(409, "녹음 중인 세션은 정지 후 삭제하세요.")
+        with meta_lock:
+            if not session_dir.exists():
+                raise HTTPException(404, "녹음 세션이 없습니다.")
+            meta = _read_metadata(session_dir)
+            removed = []
+            errors = []
+            # 고아 방지: 세션 폴더 밖의 전사 산출물(.json/.md/.partial.json)도 함께 삭제
+            for p in _external_transcript_files(session_dir, meta):
+                if p.exists():
+                    try:
+                        p.unlink()
+                        removed.append(str(p))
+                    except Exception as e:
+                        errors.append(f"{p}: {e}")  # 부분 실패를 숨기지 않고 응답에 노출
+            try:
+                shutil.rmtree(session_dir)
+                removed.append(str(session_dir))
+            except Exception as e:
+                raise HTTPException(500, f"세션 삭제 실패: {e}")
+        return {"status": "deleted", "session_id": session_id, "id": session_id,
+                "removed": removed, "errors": errors}
+
     def _run_transcribe(audio_path: str, body) -> dict:
         from .pipeline import transcribe as run_transcribe
 
@@ -330,15 +439,16 @@ def create_app():
             session_dir = audio.parent
             is_session_audio = False
         if is_session_audio:
-            meta = _read_metadata(session_dir)
-            meta.update({
-                "status": "transcribed",
-                "transcribed": True,
-                "transcribed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                "transcript_json": data.get("_json_path"),
-                "transcript_md": data.get("_md_path"),
-            })
-            _write_metadata(session_dir, meta)
+            with meta_lock:
+                meta = _read_metadata(session_dir)
+                meta.update({
+                    "status": "transcribed",
+                    "transcribed": True,
+                    "transcribed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "transcript_json": data.get("_json_path"),
+                    "transcript_md": data.get("_md_path"),
+                })
+                _write_metadata(session_dir, meta)
             data["_session_id"] = session_dir.name
             data["_audio_url"] = f"/api/recordings/{session_dir.name}/audio"
         return data

@@ -5,66 +5,187 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>meeting_stt 대시보드</title>
 <style>
-  :root { --bg:#0f1419; --panel:#1a2129; --line:#2b3440; --fg:#e6edf3; --muted:#8b98a5; --accent:#3fb950; --rec:#f85149; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
-  header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; }
-  header h1 { font-size:18px; margin:0; }
-  .sub { color:var(--muted); font-size:13px; }
-  main { display:grid; grid-template-columns:340px 1fr; gap:0; height:calc(100vh - 57px); }
-  .left { border-right:1px solid var(--line); padding:20px; overflow:auto; }
-  .right { padding:20px; overflow:auto; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
-  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
-  select, input[type=text], input[type=number] { width:100%; padding:8px; background:#0d1117; color:var(--fg); border:1px solid var(--line); border-radius:6px; font-size:14px; }
-  .row { display:flex; gap:8px; align-items:center; }
-  .row > * { flex:1; }
-  button { padding:9px 14px; border:none; border-radius:7px; font-size:14px; cursor:pointer; font-weight:600; }
-  button.primary { background:var(--accent); color:#05140a; }
-  button.rec { background:var(--rec); color:#fff; }
-  button.ghost { background:#0d1117; color:var(--fg); border:1px solid var(--line); }
-  button:disabled { opacity:.5; cursor:not-allowed; }
-  .badge { display:inline-block; padding:3px 9px; border-radius:20px; font-size:12px; font-weight:600; }
-  .badge.idle { background:#21262d; color:var(--muted); }
-  .badge.live { background:var(--rec); color:#fff; }
-  .badge.busy { background:#9e6a03; color:#fff; }
-  .hint { font-size:12px; color:var(--muted); line-height:1.5; margin-top:8px; }
-  pre { white-space:pre-wrap; word-break:break-word; background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:14px; font-size:13px; line-height:1.55; max-height:55vh; overflow:auto; }
-  .err { color:var(--rec); font-size:13px; margin-top:8px; white-space:pre-wrap; }
-  h3 { margin:0 0 6px; font-size:14px; }
-  .checkbox-row { display:flex; align-items:center; gap:8px; margin-top:10px; }
-  .checkbox-row input { width:auto; }
-  .checkbox-row label { margin:0; }
-  .hb-row { display:flex; align-items:center; gap:10px; margin-top:12px; }
-  .hb-dot { width:12px; height:12px; border-radius:50%; background:var(--muted); flex:0 0 auto; transition:background .2s; }
-  .hb-dot.beat { animation:beat .4s ease-out; }
-  @keyframes beat { 0%{ transform:scale(1); } 30%{ transform:scale(1.7); } 100%{ transform:scale(1); } }
-  .vu-track { flex:1; height:10px; background:#0d1117; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
-  .vu-fill { height:100%; width:0%; background:var(--accent); border-radius:6px; transition:width .12s linear, background .2s; }
-  .recordings-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .recordings-head h3 { margin:0; }
-  .recordings-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height:210px; overflow:auto; }
-  .recording-item { width:100%; text-align:left; background:#0d1117; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:10px; font-weight:500; }
-  .recording-item.selected { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
-  .recording-title { display:flex; justify-content:space-between; gap:8px; align-items:center; }
-  .recording-meta { color:var(--muted); font-size:12px; margin-top:4px; font-weight:400; }
-  .status-dot { flex:0 0 auto; border-radius:20px; padding:2px 7px; font-size:11px; }
-  .status-dot.done { background:#183a24; color:#7ee787; }
-  .status-dot.todo { background:#3b2300; color:#ffcc66; }
-  audio { width:100%; margin-top:10px; }
-  .empty { color:var(--muted); font-size:13px; padding:10px 0; }
+  /* ===== Toss 스타일 디자인 시스템 (라이트/다크) ===== */
+  :root{
+    --blue:#3182F6; --blue-strong:#1B64DA; --blue-soft:#E8F1FE;
+    --rec:#F04452; --rec-soft:#FDECEE;
+    --amber:#FF9500; --green:#0DA16C; --green-soft:#E4F7EF;
+    --bg:#F2F4F6; --panel:#FFFFFF; --panel-2:#F9FAFB;
+    --line:#E5E8EB; --line-soft:#EEF0F2;
+    --fg:#191F28; --fg-2:#4E5968; --muted:#8B95A1; --muted-2:#B0B8C1;
+    --shadow:0 1px 3px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.04);
+    --radius:20px; --radius-sm:12px;
+  }
+  html[data-theme="dark"]{
+    --blue:#4B93F8; --blue-strong:#3182F6; --blue-soft:#1C2A40;
+    --rec:#FF5A66; --rec-soft:#3A1E22;
+    --amber:#FFB020; --green:#2FD08A; --green-soft:#12302A;
+    --bg:#0F1216; --panel:#191F28; --panel-2:#1E2530;
+    --line:#2A313C; --line-soft:#232A34;
+    --fg:#EAEDF0; --fg-2:#C0C7D0; --muted:#8B95A1; --muted-2:#5A6472;
+    --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font-family:'Pretendard','Pretendard Variable','Apple SD Gothic Neo',system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased; line-height:1.5;
+  }
+  header{
+    position:sticky; top:0; z-index:20; background:var(--panel);
+    border-bottom:1px solid var(--line); padding:14px 28px;
+    display:flex; align-items:center; gap:14px;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  header h1{ font-size:19px; margin:0; font-weight:800; letter-spacing:-.02em; }
+  .sub{ color:var(--muted); font-size:13px; font-weight:500; }
+  .spacer{ margin-left:auto; }
+  main{
+    display:grid; grid-template-columns:380px 1fr; gap:20px;
+    max-width:1400px; margin:0 auto; padding:24px 28px 60px;
+  }
+  @media (max-width:980px){ main{ grid-template-columns:1fr; } }
+  .col{ display:flex; flex-direction:column; gap:20px; min-width:0; }
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:22px; box-shadow:var(--shadow);
+  }
+  .card h3{
+    margin:0 0 4px; font-size:15px; font-weight:700; letter-spacing:-.01em;
+    display:flex; align-items:center; gap:8px;
+  }
+  .card .desc{ color:var(--muted); font-size:12.5px; margin:0 0 16px; }
+  .step{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:8px; background:var(--blue-soft);
+    color:var(--blue); font-size:12px; font-weight:800; flex:0 0 auto;
+  }
+  label{ display:block; font-size:12.5px; color:var(--fg-2); margin:14px 0 6px; font-weight:600; }
+  label:first-of-type{ margin-top:0; }
+  select, input[type=text], input[type=number]{
+    width:100%; padding:11px 12px; background:var(--panel-2); color:var(--fg);
+    border:1px solid var(--line); border-radius:var(--radius-sm); font-size:14px;
+    font-family:inherit; outline:none; transition:border-color .15s, box-shadow .15s;
+  }
+  select:focus, input:focus{ border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-soft); }
+  .row{ display:flex; gap:10px; align-items:stretch; }
+  .row > *{ flex:1; min-width:0; }
+  .row .icon-btn{ flex:0 0 auto; }
+  button{
+    padding:11px 16px; border:none; border-radius:var(--radius-sm); font-size:14px;
+    cursor:pointer; font-weight:700; font-family:inherit; letter-spacing:-.01em;
+    transition:background .15s, opacity .15s, transform .05s, color .15s, border-color .15s;
+  }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:var(--blue); color:#fff; }
+  button.primary:hover:not(:disabled){ background:var(--blue-strong); }
+  button.rec{ background:var(--rec); color:#fff; }
+  button.rec:hover:not(:disabled){ filter:brightness(.95); }
+  button.ghost{ background:var(--panel-2); color:var(--fg); border:1px solid var(--line); }
+  button.ghost:hover:not(:disabled){ background:var(--line-soft); }
+  button.icon-btn{ background:var(--panel-2); color:var(--fg-2); border:1px solid var(--line); padding:11px 13px; }
+  button.icon-btn:hover:not(:disabled){ background:var(--line-soft); }
+  button:disabled{ opacity:.45; cursor:not-allowed; }
+  .badge{ display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:999px; font-size:12.5px; font-weight:700; }
+  .badge.idle{ background:var(--panel-2); color:var(--fg-2); border:1px solid var(--line); }
+  .badge.live{ background:var(--rec); color:#fff; }
+  .badge.busy{ background:var(--amber); color:#3a2500; }
+  .badge .dot{ width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .badge.live .dot{ background:#fff; animation:pulse 1s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+  .theme-toggle{ background:var(--panel-2); border:1px solid var(--line); color:var(--fg-2); width:38px; height:38px; border-radius:11px; padding:0; font-size:16px; }
+  .hint{ font-size:12.5px; color:var(--muted); line-height:1.6; margin-top:10px; }
+  .checkbox-row{ display:flex; align-items:center; gap:9px; margin-top:14px; }
+  .checkbox-row input{ width:18px; height:18px; accent-color:var(--blue); }
+  .checkbox-row label{ margin:0; font-weight:600; color:var(--fg-2); }
+
+  /* 하트비트 / VU */
+  .hb{ margin-top:16px; padding:16px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius-sm); }
+  .hb-row{ display:flex; align-items:center; gap:12px; }
+  .hb-dot{ width:14px; height:14px; border-radius:50%; background:var(--muted-2); flex:0 0 auto; transition:background .2s; }
+  .hb-dot.beat{ animation:beat .4s ease-out; }
+  @keyframes beat{ 0%{ transform:scale(1); } 30%{ transform:scale(1.8); } 100%{ transform:scale(1); } }
+  .vu-track{ flex:1; height:12px; background:var(--line); border-radius:8px; overflow:hidden; }
+  .vu-fill{ height:100%; width:0%; background:var(--green); border-radius:8px; transition:width .12s linear, background .2s; }
+  .hb-stats{ display:flex; gap:20px; margin-top:12px; }
+  .hb-stat{ font-size:12.5px; color:var(--muted); }
+  .hb-stat b{ color:var(--fg); font-variant-numeric:tabular-nums; font-weight:700; }
+  .warn{ color:var(--rec); font-size:12.5px; margin-top:10px; font-weight:600; }
+
+  /* 세션 목록 */
+  .list-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
+  .recordings-list{ display:flex; flex-direction:column; gap:10px; margin-top:14px; max-height:340px; overflow:auto; padding-right:2px; }
+  .recording-item{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:14px;
+    padding:14px; transition:border-color .15s, box-shadow .15s;
+  }
+  .recording-item.selected{ border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-soft); background:var(--panel); }
+  .ri-top{ display:flex; align-items:center; gap:8px; }
+  .ri-title-btn{
+    flex:1; min-width:0; text-align:left; background:none; border:none; padding:0;
+    font-size:14.5px; font-weight:700; color:var(--fg); cursor:pointer; letter-spacing:-.01em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .ri-status{ flex:0 0 auto; border-radius:999px; padding:3px 10px; font-size:11px; font-weight:700; }
+  .ri-status.done{ background:var(--green-soft); color:var(--green); }
+  .ri-status.todo{ background:#FFF3E0; color:#C77700; }
+  html[data-theme="dark"] .ri-status.todo{ background:#3A2A10; color:var(--amber); }
+  .ri-meta{ color:var(--muted); font-size:12px; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ri-actions{ display:flex; gap:6px; margin-top:12px; }
+  .ri-actions button{ padding:7px 12px; font-size:12.5px; font-weight:600; border-radius:9px; }
+  .mini{ background:var(--panel); color:var(--fg-2); border:1px solid var(--line); }
+  .mini:hover:not(:disabled){ background:var(--line-soft); }
+  .mini.danger{ color:var(--rec); }
+  .mini.danger:hover:not(:disabled){ background:var(--rec-soft); border-color:var(--rec); }
+  .ri-rename{ display:flex; gap:6px; margin-top:10px; }
+  .ri-rename input{ padding:8px 10px; font-size:13px; }
+  .ri-confirm{ display:flex; align-items:center; gap:8px; margin-top:10px; padding:10px 12px; background:var(--rec-soft); border:1px solid var(--rec); border-radius:10px; }
+  .ri-confirm span{ flex:1; font-size:12.5px; color:var(--rec); font-weight:600; }
+  .ri-confirm button{ padding:6px 12px; font-size:12.5px; font-weight:700; border-radius:8px; }
+  .btn-del-yes{ background:var(--rec); color:#fff; }
+  .btn-del-no{ background:var(--panel); color:var(--fg-2); border:1px solid var(--line); }
+  audio{ width:100%; margin-top:14px; height:38px; }
+  .empty{ color:var(--muted); font-size:13px; padding:16px 0; text-align:center; }
+
+  /* 뷰어 */
+  .viewer-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+  .viewer-head h3{ margin:0; }
+  pre{
+    white-space:pre-wrap; word-break:break-word; margin:0;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:14px;
+    padding:18px; font-size:13.5px; line-height:1.7; max-height:52vh; overflow:auto;
+    font-family:'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif; color:var(--fg-2);
+  }
+  .copy-btn{ background:var(--panel-2); color:var(--fg-2); border:1px solid var(--line); padding:8px 14px; font-size:13px; border-radius:10px; }
+  .copy-btn:hover:not(:disabled){ background:var(--line-soft); }
+  .copy-btn.ok{ background:var(--green-soft); color:var(--green); border-color:var(--green); }
+  .err{ color:var(--rec); font-size:13px; margin-top:6px; white-space:pre-wrap; font-weight:600; }
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--fg); color:var(--bg); padding:12px 22px; border-radius:12px;
+    font-size:13.5px; font-weight:600; box-shadow:var(--shadow); opacity:0;
+    transition:opacity .2s, transform .2s; pointer-events:none; z-index:50;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
 <header>
-  <h1>🎙️ meeting_stt</h1>
-  <span class="sub">로컬 ASR(Qwen3-ASR) · 화자분리(pyannote) · LLM-Wiki 회의록</span>
-  <span id="status" class="badge idle" style="margin-left:auto;">대기</span>
+  <div class="brand">
+    <h1>🎙️ meeting_stt</h1>
+    <span class="sub">로컬 ASR · 화자분리 · 회의록</span>
+  </div>
+  <div class="spacer"></div>
+  <span id="status" class="badge idle"><span class="dot"></span>대기</span>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="라이트/다크 전환">🌙</button>
 </header>
+
 <main>
-  <section class="left">
-    <div class="panel">
-      <h3>1. 입력 소스</h3>
+  <!-- 좌측: 컨트롤 -->
+  <section class="col">
+    <div class="card">
+      <h3><span class="step">1</span> 입력 소스</h3>
+      <p class="desc">녹음할 오디오 소스를 선택하세요.</p>
       <label>소스 종류</label>
       <select id="sourceType" onchange="onSourceChange()">
         <option value="device">🎙️ 마이크 / 입력 장치</option>
@@ -76,15 +197,16 @@
         <label>입력 장치</label>
         <div class="row">
           <select id="device"></select>
-          <button class="ghost" style="flex:0 0 auto;" onclick="loadDevices()">↻</button>
+          <button class="icon-btn" onclick="loadDevices()" title="새로고침">↻</button>
         </div>
+        <p class="hint">시스템 소리를 녹음하려면 BlackHole 등 가상 입력장치를 선택하세요.</p>
       </div>
 
       <div id="appBlock" style="display:none;">
         <label>앱 선택 (소리 내는 앱)</label>
         <div class="row">
           <select id="app"></select>
-          <button class="ghost" style="flex:0 0 auto;" onclick="loadApps()">↻</button>
+          <button class="icon-btn" onclick="loadApps()" title="새로고침">↻</button>
         </div>
         <p class="hint" id="appHint">웹미팅(Zoom/Meet 등)을 선택하면 그 앱 소리만 녹음됩니다. 들으면서 녹음돼요(라우팅 불필요).</p>
       </div>
@@ -94,41 +216,47 @@
       </div>
     </div>
 
-    <div class="panel">
-      <h3>2. 녹음</h3>
+    <div class="card">
+      <h3><span class="step">2</span> 녹음</h3>
+      <p class="desc">서버(sounddevice)가 녹음합니다.</p>
       <div class="row">
         <button id="btnRec" class="rec" onclick="startRec()">● 녹음 시작</button>
         <button id="btnStop" class="ghost" onclick="stopRec()" disabled>■ 정지</button>
       </div>
-      <div class="hb-row">
-        <span id="hbDot" class="hb-dot"></span>
-        <div class="vu-track"><div id="vuFill" class="vu-fill"></div></div>
+      <div class="hb">
+        <div class="hb-row">
+          <span id="hbDot" class="hb-dot"></span>
+          <div class="vu-track"><div id="vuFill" class="vu-fill"></div></div>
+        </div>
+        <div class="hb-stats">
+          <span class="hb-stat">경과 <b id="elapsed">0:00:00</b></span>
+          <span class="hb-stat">기록량 <b id="recBytes">0KB</b></span>
+        </div>
+        <p id="noSignal" class="warn" style="display:none;">⚠ 소리가 들어오지 않습니다 — 출력 소스/권한을 확인하세요</p>
       </div>
-      <p class="hint">녹음 경과: <span id="elapsed">0:00:00</span> · 기록량: <span id="recBytes">0KB</span></p>
-      <p id="noSignal" class="err" style="display:none;">⚠ 소리가 들어오지 않습니다 — 출력 소스/권한을 확인하세요</p>
     </div>
 
-
-    <div class="panel">
-      <div class="recordings-head">
-        <h3>3. 저장된 녹음</h3>
-        <button class="ghost" style="flex:0 0 auto;" onclick="loadRecordings()">새로고침</button>
+    <div class="card">
+      <div class="list-head">
+        <h3><span class="step">3</span> 저장된 녹음</h3>
+        <button class="ghost" style="padding:8px 14px;font-size:13px;" onclick="loadRecordings()">새로고침</button>
       </div>
-      <p class="hint">서버를 다시 시작해도 outputs/recordings 세션을 불러와 재생·전사할 수 있습니다.</p>
+      <p class="desc">서버를 다시 시작해도 세션을 불러와 재생·전사할 수 있습니다.</p>
       <div id="recordingList" class="recordings-list">
         <div class="empty">녹음 목록을 불러오는 중입니다.</div>
       </div>
-      <div id="recordingDetails" style="display:none;margin-top:12px;">
+      <div id="recordingDetails" style="display:none;margin-top:14px;">
         <audio id="recordingAudio" controls preload="metadata"></audio>
         <p id="recordingMeta" class="hint"></p>
-        <button class="primary" style="width:100%;margin-top:10px;" id="btnTransSaved" onclick="transcribe()" disabled>선택 녹음 전사 ▶</button>
       </div>
     </div>
-    <div class="panel">
-      <h3>4. 전사 옵션</h3>
+
+    <div class="card">
+      <h3><span class="step">4</span> 전사 옵션</h3>
+      <p class="desc">선택한 녹음을 전사합니다.</p>
       <label>context 키워드 (쉼표 구분)</label>
       <input id="context" type="text" placeholder="LLM-Wiki, Qwen3-ASR, 김상규" />
-      <div class="row">
+      <div class="row" style="margin-top:0;">
         <div>
           <label>화자 수 (선택)</label>
           <input id="numSpk" type="number" min="1" placeholder="자동" />
@@ -142,21 +270,27 @@
         <input id="diarize" type="checkbox" checked />
         <label for="diarize">화자분리 사용</label>
       </div>
-      <button class="primary" style="width:100%;margin-top:14px;" id="btnTrans" onclick="transcribe()" disabled>전사 실행 ▶</button>
+      <button class="primary" style="width:100%;margin-top:18px;" id="btnTrans" onclick="transcribe()" disabled>전사 실행 ▶</button>
       <p class="hint">녹음을 정지하거나 목록에서 선택하면 전사 대상에 올라갑니다. CPU 환경은 다소 시간이 걸립니다.</p>
     </div>
   </section>
 
-  <section class="right">
-    <div class="panel">
-      <h3>전사 결과 (화자 귀속)</h3>
+  <!-- 우측: 뷰어 -->
+  <section class="col">
+    <div class="card">
+      <div class="viewer-head">
+        <h3>📝 전사 결과 <span class="sub" style="font-weight:500;">화자 귀속</span></h3>
+        <button class="copy-btn" id="btnCopy" onclick="copyTranscript()" disabled>복사</button>
+      </div>
       <pre id="transcript">아직 결과가 없습니다.</pre>
     </div>
-    <div class="panel">
-      <h3>회의록</h3>
-      <div class="row" style="margin-bottom:10px;">
-        <button class="ghost" id="btnNotes" onclick="makeNotes(false)" disabled>로컬 회의록 생성</button>
-        <button class="ghost" id="btnPrompt" onclick="makeNotes(true)" disabled>AI 요약 프롬프트 생성</button>
+    <div class="card">
+      <div class="viewer-head">
+        <h3>📄 회의록</h3>
+        <div class="row" style="gap:8px;">
+          <button class="ghost" style="padding:8px 14px;font-size:13px;" id="btnNotes" onclick="makeNotes(false)" disabled>로컬 회의록</button>
+          <button class="ghost" style="padding:8px 14px;font-size:13px;" id="btnPrompt" onclick="makeNotes(true)" disabled>AI 요약 프롬프트</button>
+        </div>
       </div>
       <pre id="notes">전사 후 생성할 수 있습니다.</pre>
     </div>
@@ -164,21 +298,49 @@
   </section>
 </main>
 
+<div id="toast" class="toast"></div>
+
 <script>
-let lastWav = null;        // 정지 후 wav 경로
+let lastWav = null;
 let lastTranscriptJson = null;
-let pollTimer = null;      // /api/record/status 폴링 인터벌
-let lastBytes = 0;         // 직전 폴링 bytes(정체 감지용)
-let staleCount = 0;        // 무신호 연속 폴링 횟수
-let recordings = [];        // 저장된 녹음 세션 목록
+let lastTranscriptText = '';     // 복사용: 화면에 표시 중인 전사 텍스트
+let pollTimer = null;
+let lastBytes = 0;
+let staleCount = 0;
+let recordings = [];
 let selectedRecording = null;
 let transcribing = false;
+let pendingDeleteKey = null;     // 삭제 인라인 확인 중인 세션 키
+
+/* ===== 테마 ===== */
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('themeToggle').textContent = t === 'dark' ? '☀️' : '🌙';
+  try{ localStorage.setItem('stt-theme', t); }catch(e){}
+}
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+}
+(function initTheme(){
+  let t = null;
+  try{ t = localStorage.getItem('stt-theme'); }catch(e){}
+  if(!t){ t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; }
+  applyTheme(t);
+})();
 
 function showErr(msg){ document.getElementById('error').textContent = msg ? ('⚠ ' + msg) : ''; }
-function setStatus(text, cls){ const s=document.getElementById('status'); s.textContent=text; s.className='badge '+cls; }
+function setStatus(text, cls){ const s=document.getElementById('status'); s.innerHTML='<span class="dot"></span>'+text; s.className='badge '+cls; }
 function setText(id, text){ document.getElementById(id).textContent = text; }
-
 function hms(sec){ sec=Math.round(sec||0); const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+
+let toastTimer = null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 1800);
+}
 
 async function api(path, opts){
   const r = await fetch(path, opts);
@@ -188,7 +350,6 @@ async function api(path, opts){
 }
 
 function sourceType(){ return document.getElementById('sourceType').value; }
-
 function onSourceChange(){
   const src = sourceType();
   document.getElementById('deviceBlock').style.display = src==='device' ? 'block' : 'none';
@@ -250,17 +411,17 @@ function recordingTitle(r){
 function recordingMeta(r){
   const bits = [];
   if(r.duration_sec != null) bits.push(hms(r.duration_sec));
-  const p = recordingPath(r);
-  if(p) bits.push(p);
+  if(r.bytes) bits.push(fmtBytes(r.bytes));
+  if(r.name && r.created_at) bits.push(r.created_at);  // 이름을 붙였으면 원래 시각도 표시
   return bits.join(' · ') || 'metadata.json 없음';
 }
 function setTranscribeButtons(){
   const disabled = transcribing || !selectedRecording || !recordingPath(selectedRecording);
-  document.getElementById('btnTrans').disabled = disabled;
-  const saved = document.getElementById('btnTransSaved');
-  saved.disabled = disabled;
-  saved.textContent = isTranscribed(selectedRecording) ? '선택 녹음 다시 전사 ▶' : '선택 녹음 전사 ▶';
+  const main = document.getElementById('btnTrans');
+  main.disabled = disabled;
+  main.textContent = (isTranscribed(selectedRecording) ? '다시 전사 ▶' : '전사 실행 ▶');
 }
+
 function renderRecordingList(){
   const list = document.getElementById('recordingList');
   list.textContent = '';
@@ -275,30 +436,124 @@ function renderRecordingList(){
   }
   const selectedKey = selectedRecording ? recordingKey(selectedRecording) : '';
   for(const rec of recordings){
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'recording-item' + (recordingKey(rec) === selectedKey ? ' selected' : '');
-    item.onclick = () => selectRecording(recordingKey(rec));
+    const key = recordingKey(rec);
+    const item = document.createElement('div');
+    item.dataset.key = key;  // 선택 하이라이트를 전체 재렌더 없이 갱신하기 위한 식별자
+    item.className = 'recording-item' + (key === selectedKey ? ' selected' : '');
 
-    const title = document.createElement('div');
-    title.className = 'recording-title';
-    const name = document.createElement('span');
-    name.textContent = recordingTitle(rec);
+    // 상단: 제목(선택) + 전사 상태
+    const top = document.createElement('div');
+    top.className = 'ri-top';
+    const titleBtn = document.createElement('button');
+    titleBtn.className = 'ri-title-btn';
+    titleBtn.textContent = recordingTitle(rec);
+    titleBtn.title = '클릭하여 선택';
+    titleBtn.onclick = () => selectRecording(key);
     const status = document.createElement('span');
-    status.className = 'status-dot ' + (isTranscribed(rec) ? 'done' : 'todo');
+    status.className = 'ri-status ' + (isTranscribed(rec) ? 'done' : 'todo');
     status.textContent = isTranscribed(rec) ? '전사됨' : '미전사';
-    title.appendChild(name);
-    title.appendChild(status);
+    top.appendChild(titleBtn);
+    top.appendChild(status);
 
     const meta = document.createElement('div');
-    meta.className = 'recording-meta';
+    meta.className = 'ri-meta';
     meta.textContent = recordingMeta(rec);
 
-    item.appendChild(title);
+    // 액션: 이름 수정 / 삭제
+    const actions = document.createElement('div');
+    actions.className = 'ri-actions';
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'mini';
+    renameBtn.textContent = '✎ 이름';
+    renameBtn.onclick = () => openRename(item, rec);
+    const delBtn = document.createElement('button');
+    delBtn.className = 'mini danger';
+    delBtn.textContent = '🗑 삭제';
+    delBtn.onclick = () => openDeleteConfirm(item, rec);
+    actions.appendChild(renameBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(top);
     item.appendChild(meta);
+    item.appendChild(actions);
     list.appendChild(item);
   }
 }
+
+// 선택만 바뀔 때는 목록 전체를 다시 만들지 않고 .selected 클래스만 옮긴다.
+// (전체 재렌더는 다른 행에 열어둔 이름수정/삭제확인 패널을 없애고 세션 수만큼 낭비된다)
+function updateSelectionHighlight(){
+  const selectedKey = selectedRecording ? recordingKey(selectedRecording) : '';
+  for(const item of document.querySelectorAll('#recordingList .recording-item')){
+    item.classList.toggle('selected', item.dataset.key === selectedKey);
+  }
+}
+
+/* --- B2: 이름 인라인 편집 --- */
+function openRename(item, rec){
+  if(item.querySelector('.ri-rename')) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'ri-rename';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = '세션 이름 (비우면 기본값)';
+  input.value = rec.name || '';
+  const save = document.createElement('button');
+  save.className = 'mini'; save.textContent = '저장';
+  const cancel = document.createElement('button');
+  cancel.className = 'mini'; cancel.textContent = '취소';
+  save.onclick = () => doRename(rec, input.value);
+  cancel.onclick = () => wrap.remove();
+  input.onkeydown = (e) => { if(e.key==='Enter') doRename(rec, input.value); if(e.key==='Escape') wrap.remove(); };
+  wrap.appendChild(input); wrap.appendChild(save); wrap.appendChild(cancel);
+  item.appendChild(wrap);
+  input.focus(); input.select();
+}
+async function doRename(rec, name){
+  showErr('');
+  const key = recordingKey(rec);
+  try{
+    await api(`/api/recordings/${encodeURIComponent(rec.session_id || rec.id)}/rename`,
+      {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name: (name||'').trim()})});
+    toast('이름을 저장했어요');
+    await loadRecordings(key);
+  }catch(e){ showErr('이름 저장 실패: '+e.message); }
+}
+
+/* --- B3: 삭제 인라인 확인 (confirm 미사용) --- */
+function openDeleteConfirm(item, rec){
+  if(item.querySelector('.ri-confirm')) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'ri-confirm';
+  const msg = document.createElement('span');
+  msg.textContent = '녹음·전사·회의록이 모두 삭제되고 되돌릴 수 없어요. 삭제할까요?';
+  const yes = document.createElement('button');
+  yes.className = 'btn-del-yes'; yes.textContent = '삭제';
+  const no = document.createElement('button');
+  no.className = 'btn-del-no'; no.textContent = '취소';
+  yes.onclick = () => doDelete(rec);
+  no.onclick = () => wrap.remove();
+  wrap.appendChild(msg); wrap.appendChild(yes); wrap.appendChild(no);
+  item.appendChild(wrap);
+}
+async function doDelete(rec){
+  showErr('');
+  const key = recordingKey(rec);
+  try{
+    const res = await api(`/api/recordings/${encodeURIComponent(rec.session_id || rec.id)}`, {method:'DELETE'});
+    toast('세션을 삭제했어요');
+    if(res && res.errors && res.errors.length){  // 일부 파일 삭제 실패는 숨기지 않고 알림
+      showErr('일부 파일을 삭제하지 못했습니다: ' + res.errors.join(' / '));
+    }
+    if(selectedRecording && recordingKey(selectedRecording) === key){
+      selectedRecording = null;
+      lastTranscriptJson = null;
+      clearTranscriptView('아직 결과가 없습니다.');  // 삭제된 세션 텍스트가 복사되지 않도록 초기화
+    }
+    await loadRecordings();
+  }catch(e){ showErr('삭제 실패: '+e.message); }
+}
+
 function renderSelectedRecording(){
   const panel = document.getElementById('recordingDetails');
   const audio = document.getElementById('recordingAudio');
@@ -307,14 +562,14 @@ function renderSelectedRecording(){
     audio.removeAttribute('src');
     audio.load();
     lastTranscriptJson = null;
+    clearTranscriptView();  // 선택 해제 시 복사 대상도 비운다
     document.getElementById('btnNotes').disabled = true;
     document.getElementById('btnPrompt').disabled = true;
     setTranscribeButtons();
     return;
   }
   const src = recordingAudioUrl(selectedRecording);
-  if(src){ audio.src = src; }
-  else{ audio.removeAttribute('src'); }
+  if(src){ audio.src = src; } else { audio.removeAttribute('src'); }
   audio.load();
   setText('recordingMeta', `${isTranscribed(selectedRecording) ? '전사됨' : '미전사'} · ${recordingMeta(selectedRecording)}`);
   panel.style.display = 'block';
@@ -324,14 +579,31 @@ function renderSelectedRecording(){
   document.getElementById('btnPrompt').disabled = !lastTranscriptJson;
   setTranscribeButtons();
 }
-function selectRecording(key){
+
+async function selectRecording(key){
   selectedRecording = recordings.find(r => recordingKey(r) === key) || null;
-  renderRecordingList();
+  updateSelectionHighlight();  // 전체 재렌더 대신 하이라이트만 이동
   renderSelectedRecording();
-  if(selectedRecording){
-    document.getElementById('transcript').textContent = lastTranscriptJson ? ('전사 JSON: ' + lastTranscriptJson) : '선택한 녹음은 아직 전사되지 않았습니다.';
+  if(!selectedRecording){ clearTranscriptView(); return; }
+  if(!isTranscribed(selectedRecording)){
+    clearTranscriptView('선택한 녹음은 아직 전사되지 않았습니다.');
+    return;
+  }
+  // 저장된 전사를 서버에서 불러와 화면·복사 대상을 이 세션 것으로 맞춘다.
+  const sid = selectedRecording.session_id || selectedRecording.id;
+  clearTranscriptView('전사 불러오는 중…');
+  try{
+    const data = await api(`/api/recordings/${encodeURIComponent(sid)}/transcript`);
+    const cur = selectedRecording && (selectedRecording.session_id || selectedRecording.id);
+    if(cur === sid){  // 로딩 중 선택이 바뀌지 않았을 때만 반영(빠른 연속 클릭 방어)
+      showTranscriptSegments(data.segments);
+    }
+  }catch(e){
+    const cur = selectedRecording && (selectedRecording.session_id || selectedRecording.id);
+    if(cur === sid){ clearTranscriptView('전사 결과를 불러오지 못했습니다: '+e.message); }
   }
 }
+
 async function loadRecordings(preferredKey, preferredPath){
   try{
     const data = await api('/api/recordings');
@@ -361,18 +633,16 @@ function resetHeartbeat(){
 async function pollStatus(){
   let st;
   try{ st = await api('/api/record/status'); }
-  catch(e){ return; }  // status는 조용히(폴링이라 잡음 방지)
+  catch(e){ return; }
   if(!st.recording){ return; }
 
   document.getElementById('elapsed').textContent = hms(st.elapsed_sec);
   document.getElementById('recBytes').textContent = fmtBytes(st.bytes);
 
-  // VU 바: 약간 부스트하여 채움, 레벨별 색
   const lv = st.level || 0;
   document.getElementById('vuFill').style.width = Math.min(100, lv*140) + '%';
-  document.getElementById('vuFill').style.background = lv < 0.1 ? 'var(--accent)' : (lv < 0.3 ? '#a5e75a' : '#e3c000');
+  document.getElementById('vuFill').style.background = lv < 0.1 ? 'var(--green)' : (lv < 0.3 ? '#3BC97F' : 'var(--amber)');
 
-  // 박동 점: 신호가 흐르면(레벨 또는 bytes 증가) beat 1회 재생
   const flowing = lv > 0.005 || st.bytes > lastBytes;
   const dot = document.getElementById('hbDot');
   if(flowing){
@@ -382,7 +652,7 @@ async function pollStatus(){
     document.getElementById('noSignal').style.display = 'none';
   }else{
     dot.classList.remove('beat');
-    dot.style.background = 'var(--muted)';
+    dot.style.background = 'var(--muted-2)';
     staleCount++;
     if(staleCount >= 8){ document.getElementById('noSignal').style.display = 'block'; }
   }
@@ -447,8 +717,7 @@ async function transcribe(){
       selectedRecording.transcript_json = lastTranscriptJson;
       selectedRecording.transcript_md = data._md_path || data.transcript_md;
     }
-    const lines = (data.segments||[]).map(s=>`[${s.speaker}] ${hms(s.start)}~${hms(s.end)}: ${s.text}`);
-    document.getElementById('transcript').textContent = lines.join('\n') || '(빈 결과)';
+    showTranscriptSegments(data.segments);
     document.getElementById('btnNotes').disabled = !lastTranscriptJson;
     document.getElementById('btnPrompt').disabled = !lastTranscriptJson;
     renderRecordingList();
@@ -457,6 +726,51 @@ async function transcribe(){
     await loadRecordings(selectedRecording ? recordingKey(selectedRecording) : null, lastWav);
   }catch(e){ showErr('전사 실패: '+e.message); setStatus('오류', 'idle'); }
   finally{ transcribing = false; setTranscribeButtons(); }
+}
+
+/* --- B1: 전사 복사 --- */
+// 복사 대상 텍스트/활성 상태는 항상 "현재 화면에 표시 중인 전사"만을 따르도록 한 곳에서 갱신한다.
+function showTranscriptSegments(segments){
+  const lines = (segments||[]).map(s=>`[${s.speaker}] ${hms(s.start)}~${hms(s.end)}: ${s.text}`);
+  lastTranscriptText = lines.join('\n') || '';
+  document.getElementById('transcript').textContent = lastTranscriptText || '(빈 결과)';
+  setCopyEnabled();
+}
+function clearTranscriptView(msg){
+  lastTranscriptText = '';
+  document.getElementById('transcript').textContent = msg || '아직 결과가 없습니다.';
+  setCopyEnabled();
+}
+function setCopyEnabled(){
+  document.getElementById('btnCopy').disabled = !lastTranscriptText;
+}
+async function copyTranscript(){
+  const text = lastTranscriptText;
+  if(!text){ return; }
+  const btn = document.getElementById('btnCopy');
+  const done = () => {
+    btn.textContent = '복사됨'; btn.classList.add('ok');
+    setTimeout(()=>{ btn.textContent = '복사'; btn.classList.remove('ok'); }, 1500);
+  };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(text);
+      done(); return;
+    }
+    throw new Error('clipboard API 미지원');
+  }catch(e){
+    // 폴백: textarea + execCommand
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if(ok){ done(); } else { showErr('복사에 실패했습니다.'); }
+    }catch(e2){ showErr('복사에 실패했습니다: '+e2.message); }
+  }
 }
 
 async function makeNotes(promptOnly){

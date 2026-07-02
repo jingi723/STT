@@ -29,6 +29,7 @@
 | 2026-06-21 | 빌드 통합 + 키 env화 + 윈도우 런처 제거 | build.sh 1개로 통합(native/build.sh·scripts/apply-icon.sh 흡수), HF토큰 .env(HF_TOKEN)로 이전+keys.json 삭제, STT실행.bat 삭제, requirements.txt를 실동작 venv freeze로 갱신 | 사용자 요청: .bat 제거·빌드 한 파일·키 env |
 | 2026-06-25 | 시스템 전체 출력 캡처 + 녹음 하트비트 | apptap.swift(`record-system`=stereoGlobalTapButExcludeProcesses 전역탭 + 200ms RMS `LEVEL` stdout), capture.py(`SystemRecorder`/`_NativeRecorder`/`Recorder.level`/`buffered_bytes`), server.py(source=system, `GET /api/record/status`), web/index.html(🔊시스템출력 옵션·박동점·VU·기록량·무신호 경고, 400ms 폴링) | 사용자 피드백: 비슷한 프로세스명이 많아 앱 선택이 어려움 → 출력 전체 녹음 + 녹음 동작 확인용 하트비트 |
 | 2026-06-27 | 영구 녹음 세션 워크플로우 반영 | dashboard/audio-capture agents, web-dashboard/audio-capture/stt-build-orchestrator skills, CLAUDE.md | 녹음을 `outputs/recordings/{timestamp_slug}/audio.wav`+`metadata.json`으로 저장하고 재시작 후 재생·미전사 목록·나중 전사를 지원 |
+| 2026-07-03 | 대시보드 토스 스타일 리디자인 + 세션 관리 기능 | web/index.html(토스 스타일 라이트/다크·#3182F6·Pretendard·자체완결), server.py(`POST /api/recordings/{id}/rename`→metadata `name`, `DELETE /api/recordings/{id}`→폴더+transcript .md/.json 고아삭제, `_recording_payload`에 name 노출), 전사 복사 버튼(clipboard+폴백) | 사용자 요청: 전사 결과 복사·세션 이름 수정·세션 삭제 + 새 디자인 적용 |
 
 ## 환경 현황 (2026-06-21)
 - venv: `STT_env` (Python 3.12.13), ASR 스택(torch 2.12.1, qwen-asr 0.0.6, pyannote.audio 4.0.4) + 대시보드 의존성. ffmpeg 8.1.2.
