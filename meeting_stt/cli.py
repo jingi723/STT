@@ -99,11 +99,11 @@ def cmd_devices(args) -> int:
 
 
 def cmd_clean_audio(args) -> int:
-    """무거운 녹음 음성(outputs/recordings/*.wav)을 삭제해 공간 확보. 텍스트(.md/.json)는 보존."""
+    """무거운 녹음 음성(outputs/recordings/**/*.wav)을 삭제해 공간 확보. 텍스트(.md/.json)는 보존."""
     from .config import Config
 
     rec_dir = Config.from_cwd().outputs_dir / "recordings"
-    wavs = sorted(rec_dir.glob("*.wav")) if rec_dir.exists() else []
+    wavs = sorted(rec_dir.rglob("*.wav")) if rec_dir.exists() else []
     if not wavs:
         print("삭제할 녹음 파일이 없습니다.")
         return 0

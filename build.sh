@@ -6,6 +6,7 @@
 #   bash build.sh           # 전체 (처음 셋업)
 #   bash build.sh deps      # venv + 의존성만
 #   bash build.sh apptap    # 앱캡처 헬퍼만 빌드
+#   bash build.sh app       # SwiftUI 앱만 빌드
 #   bash build.sh icon      # 런처 아이콘만 재적용
 #   bash build.sh models    # 모델만 다운로드 (.env 의 HF_TOKEN 필요)
 set -e
@@ -69,6 +70,24 @@ PLISTEOF
   echo "  apptap OK ($(pwd)/native/apptap)"
 }
 
+build_app(){
+  log "SwiftUI 앱 빌드"
+  command -v swift >/dev/null || { echo "  ✗ swift 없음 → 'xcode-select --install' 후 다시 실행하세요."; exit 1; }
+  command -v swiftc >/dev/null || { echo "  ✗ swiftc 없음 → 'xcode-select --install' 후 다시 실행하세요."; exit 1; }
+
+  local APP="STT실행.app"
+  local MACOS="$APP/Contents/MacOS"
+  local RESOURCES="$APP/Contents/Resources"
+  swift build --package-path macos -c release
+  mkdir -p "$MACOS" "$RESOURCES"
+  rm -f "$MACOS/stt-launch"
+  install -m 755 macos/.build/release/MeetingSTTApp "$MACOS/MeetingSTTApp"
+  cp assets/stt-icon.icns "$RESOURCES/icon.icns"
+  codesign --force --deep --sign - "$APP"
+  touch "$APP"
+  echo "  앱 OK ($(pwd)/$APP)"
+}
+
 apply_icon(){
   log "런처 아이콘 적용"
   local ICNS="assets/stt-icon.icns" TARGET="STT실행.command"
@@ -95,10 +114,11 @@ download_models(){
 case "${1:-all}" in
   deps)   setup_deps ;;
   apptap) build_apptap ;;
+  app)    build_app ;;
   icon)   apply_icon ;;
   models) download_models ;;
   prereqs) check_prereqs ;;
-  all)    check_prereqs; setup_deps; build_apptap; apply_icon; download_models
-          log "완료 — 'STT실행.command' 더블클릭으로 실행" ;;
-  *) echo "사용: bash build.sh [all|prereqs|deps|apptap|icon|models]"; exit 2 ;;
+  all)    check_prereqs; setup_deps; build_apptap; apply_icon; build_app; download_models
+          log "완료 — 'STT실행.app' 더블클릭으로 실행" ;;
+  *) echo "사용: bash build.sh [all|prereqs|deps|apptap|app|icon|models]"; exit 2 ;;
 esac

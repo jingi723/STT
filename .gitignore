@@ -1,21 +1,30 @@
-# 로컬 설정/비밀
-.claude/settings.local.json
-keys.json
+# Secrets and machine-local configuration
 .env
-.DS_Store
+.env.*
+!.env.example
+keys.json
+*.key
+*.pem
+.claude/settings.local.json
 
-# 가상환경
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Python
 .venv/
 venv/
 STT_env/
 __pycache__/
 .ipynb_checkpoints/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 *.egg-info/
 
-# 로컬 미디어 / 생성 산출물
+# Recordings, transcripts, and generated user content
+outputs/
+LLM-Wiki/
 *.mp3
 *.wav
 *.m4a
@@ -25,11 +34,21 @@ __pycache__/
 *.srt
 *.vtt
 *.jsonl
-outputs/
+
+# Downloaded models and checkpoints
 models/
 checkpoints/
 
-# 네이티브 헬퍼 빌드 산출물 (build.sh로 재생성)
+# Native build and signing artifacts
 native/apptap
 native/_CodeSignature/
+STT실행.app/Contents/MacOS/MeetingSTTApp
+STT실행.app/Contents/_CodeSignature/
 *.swiftmodule
+macos/.build/
+.swiftpm/
+DerivedData/
+
+# Agent scratch artifacts
+_workspace/
+_workspace_prev/

@@ -7,6 +7,9 @@
   <key>CFBundleVersion</key><string>1.0</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>stt-launch</string>
+  <key>CFBundleExecutable</key><string>MeetingSTTApp</string>
   <key>CFBundleIconFile</key><string>icon</string>
+  <key>LSMinimumSystemVersion</key><string>14.2</string>
+  <key>NSMicrophoneUsageDescription</key><string>회의 오디오 전사를 위해 마이크를 녹음합니다.</string>
+  <key>NSAudioCaptureUsageDescription</key><string>회의 오디오 전사를 위해 선택한 앱 또는 시스템의 오디오를 녹음합니다.</string>
 </dict></plist>

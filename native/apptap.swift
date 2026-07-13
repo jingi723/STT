@@ -232,21 +232,29 @@ let ioProc: AudioDeviceIOProc = { (_, _, inInputData, _, _, _, context) -> OSSta
     let frames = firstSize / bytesPerFrame
     if frames == 0 { return noErr }
 
-    // RMS 누적 (Float32 인터리브 프레임 가정). 제곱합과 표본 수를 짧은 락 안에서 더한다.
+    // RMS 누적 (Float32, interleaved/non-interleaved 모두 모든 buffer 순회).
     if rec.asbd.mFormatID == kAudioFormatLinearPCM,
        (rec.asbd.mFormatFlags & kAudioFormatFlagIsFloat) != 0,
-       let raw = buffers.mBuffers.mData {
-        let sampleCount = Int(firstSize) / MemoryLayout<Float32>.size
-        if sampleCount > 0 {
-            let ptr = raw.assumingMemoryBound(to: Float32.self)
-            var localSum: Double = 0
-            for i in 0..<sampleCount {
-                let v = Double(ptr[i])
-                localSum += v * v
+       rec.asbd.mBitsPerChannel == 32 {
+        let bufferList = UnsafeMutableAudioBufferListPointer(
+            UnsafeMutablePointer(mutating: inInputData)
+        )
+        var localSum: Double = 0
+        var localCount: UInt64 = 0
+        for buffer in bufferList {
+            guard let raw = buffer.mData else { continue }
+            let count = Int(buffer.mDataByteSize) / MemoryLayout<Float32>.size
+            let samples = raw.assumingMemoryBound(to: Float32.self)
+            for index in 0..<count {
+                let value = Double(samples[index])
+                localSum += value * value
             }
+            localCount += UInt64(count)
+        }
+        if localCount > 0 {
             os_unfair_lock_lock(&rec.levelLock)
             rec.sumSquares += localSum
-            rec.sampleCount += UInt64(sampleCount)
+            rec.sampleCount += localCount
             os_unfair_lock_unlock(&rec.levelLock)
         }
     }

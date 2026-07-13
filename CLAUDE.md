@@ -1,16 +1,16 @@
 # STT 회의록 자동화 프로젝트
 
-로컬 ASR(Qwen3-ASR-1.7B) · 화자분리(pyannote) · LLM-Wiki 회의록 생성 파이프라인. `notebooks/test.ipynb` 실습 코드를 실제 동작하는 `meeting_stt` 패키지로 구현한다.
+로컬 ASR(Qwen3-ASR-1.7B) · 화자분리(pyannote) · LLM-Wiki 회의록 생성 파이프라인. 네이티브 SwiftUI macOS 앱이 녹음·세션·재생·worker 수명주기를 담당하고, `meeting_stt` Python 패키지가 전사와 회의록 생성을 담당한다.
 
 ## 디렉터리
-- `meeting_stt/` 프로그램 패키지 · `native/apptap.swift` 앱캡처 헬퍼 · `scripts/download_models.py` 모델 다운로드 · `build.sh` 빌드/셋업 통합(deps·apptap·icon·models) · `notebooks/` 강의노트 · `STT실행.command` 런처(아이콘, macOS) · `assets/` 아이콘 원본 · `.env`(HF_TOKEN)·`models/`·`STT_env/` 런타임(미커밋).
+- `macos/Sources/MeetingSTTApp/` SwiftUI 앱 · `meeting_stt/` Python worker와 CLI · `native/apptap.swift` 시스템/앱 출력 캡처 헬퍼 · `scripts/download_models.py` 모델 다운로드 · `build.sh` 통합 빌드(deps·apptap·app·icon·models) · `STT실행.app` 기본 런처 · `STT실행.command` 레거시 웹 런처 · `assets/` 아이콘 원본. `.env`·`models/`·`STT_env/`·`outputs/`는 로컬 런타임이며 Git에서 제외한다.
 - **HF 토큰**: `.env`의 `HF_TOKEN` 또는 환경변수에서 읽음(`config.load_hf_token`). keys.json은 폐기(레거시 폴백만 유지).
 
 ## 하네스: STT 회의록 빌드
 
-**목표:** 노트북 실습 코드를 실제 동작하는 `meeting_stt` Python 패키지+CLI로 구현/유지보수한다.
+**목표:** SwiftUI macOS 앱과 `meeting_stt` Python worker/CLI를 기존 디스크 계약으로 연결해 로컬 회의 녹음·전사·회의록 워크플로우를 구현하고 유지보수한다.
 
-**트리거:** STT 프로그램 구현·수정·재실행, ASR/화자분리/회의록 파이프라인 코드 작업, 대시보드 녹음 세션·재생·나중 전사, 전사·요약 기능 추가/보완 요청 시 `stt-build-orchestrator` 스킬을 사용하라. 단순 개념 질문은 직접 응답 가능.
+**트리거:** STT 프로그램 구현·수정·재실행, SwiftUI 앱, ASR/화자분리/회의록 파이프라인, 녹음 세션·재생·나중 전사, 전사·요약 기능 추가/보완 요청 시 `stt-build-orchestrator` 스킬을 사용하라. 단순 개념 질문은 직접 응답 가능.
 
 **범위 고정:** ASR은 **Qwen3-ASR-1.7B 단일**(Whisper 제외). 화자분리는 pyannote.
 
@@ -30,10 +30,12 @@
 | 2026-06-25 | 시스템 전체 출력 캡처 + 녹음 하트비트 | apptap.swift(`record-system`=stereoGlobalTapButExcludeProcesses 전역탭 + 200ms RMS `LEVEL` stdout), capture.py(`SystemRecorder`/`_NativeRecorder`/`Recorder.level`/`buffered_bytes`), server.py(source=system, `GET /api/record/status`), web/index.html(🔊시스템출력 옵션·박동점·VU·기록량·무신호 경고, 400ms 폴링) | 사용자 피드백: 비슷한 프로세스명이 많아 앱 선택이 어려움 → 출력 전체 녹음 + 녹음 동작 확인용 하트비트 |
 | 2026-06-27 | 영구 녹음 세션 워크플로우 반영 | dashboard/audio-capture agents, web-dashboard/audio-capture/stt-build-orchestrator skills, CLAUDE.md | 녹음을 `outputs/recordings/{timestamp_slug}/audio.wav`+`metadata.json`으로 저장하고 재시작 후 재생·미전사 목록·나중 전사를 지원 |
 | 2026-07-03 | 대시보드 토스 스타일 리디자인 + 세션 관리 기능 | web/index.html(토스 스타일 라이트/다크·#3182F6·Pretendard·자체완결), server.py(`POST /api/recordings/{id}/rename`→metadata `name`, `DELETE /api/recordings/{id}`→폴더+transcript .md/.json 고아삭제, `_recording_payload`에 name 노출), 전사 복사 버튼(clipboard+폴백) | 사용자 요청: 전사 결과 복사·세션 이름 수정·세션 삭제 + 새 디자인 적용 |
+| 2026-07-13 | SwiftUI 네이티브 앱 전환 | macos/MeetingSTTApp(AppModel·ContentView·SessionStore·ProcessRunner·DeviceRecorder), build.sh app, STT실행.app | 브라우저 없이 입력·시스템·앱 녹음, 세션, 재생, 전사와 회의록을 관리하고 기존 Python ML worker를 재사용 |
 
-## 환경 현황 (2026-06-21)
+## 환경 현황 (2026-07-13)
 - venv: `STT_env` (Python 3.12.13), ASR 스택(torch 2.12.1, qwen-asr 0.0.6, pyannote.audio 4.0.4) + 대시보드 의존성. ffmpeg 8.1.2.
 - 모델: `models/Qwen3-ASR`(완료). 화자분리는 비-gated 미러 `pyannote-community/speaker-diarization-community-1`을 HF 캐시로 받음(약관 동의 불필요). 재다운로드: `STT_env/bin/python scripts/download_models.py`.
 - **전사·화자분리·회의록 전부 실측 동작 확인**(2화자 A→B→A 정확 분리).
 - 디바이스: CPU/float32. MPS 가용하나 pyannote 호환 위해 보류.
 - gated 메모: pyannote 공식 모델은 약관 수동 동의 필요(API 동의 불가). MIT 라이선스라 자체완결 미러로 대체함.
+- SwiftUI 앱 release 빌드와 ad-hoc 서명, 시스템 출력 LEVEL 실시간 전달, 앱·시스템 출력 WAV finalize를 확인함.
