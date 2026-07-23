@@ -1,3 +1,4 @@
+import AppKit
 import CoreAudio
 import SwiftUI
 
@@ -400,13 +401,7 @@ struct ContentView: View {
                     )
                     .frame(minHeight: Layout.resultMinimumHeight)
                 } else {
-                    ScrollView([.horizontal, .vertical]) {
-                        Text(model.currentResultText)
-                            .font(.body.monospaced())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(Layout.small)
-                    }
+                    ResultTextView(text: model.currentResultText)
                     .frame(minHeight: Layout.resultMinimumHeight, maxHeight: Layout.resultMaximumHeight)
                 }
             }
@@ -460,6 +455,42 @@ struct ContentView: View {
         return String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
+}
+
+private struct ResultTextView: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasHorizontalScroller = true
+        scrollView.hasVerticalScroller = true
+
+        let textView = scrollView.documentView as! NSTextView
+        textView.drawsBackground = false
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        textView.textColor = .labelColor
+        textView.textContainerInset = NSSize(width: Layout.small, height: Layout.small)
+        textView.isHorizontallyResizable = true
+        textView.isVerticallyResizable = true
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.containerSize = textView.maxSize
+        textView.textContainer?.widthTracksTextView = false
+        textView.layoutManager?.allowsNonContiguousLayout = true
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView, textView.string != text else { return }
+        textView.string = text
+    }
 }
 
 private enum Layout {

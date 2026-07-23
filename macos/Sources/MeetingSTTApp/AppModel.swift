@@ -62,6 +62,14 @@ enum ResultKind: String, CaseIterable, Identifiable {
     }
 }
 
+private struct SessionResults: Equatable {
+    let transcript: String
+    let notes: String
+    let prompt: String
+
+    static let empty = SessionResults(transcript: "", notes: "", prompt: "")
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var activity: Activity = .idle
@@ -87,9 +95,7 @@ final class AppModel: ObservableObject {
     @Published var project = ""
 
     @Published var resultKind: ResultKind = .transcript
-    @Published private(set) var transcriptText = ""
-    @Published private(set) var notesText = ""
-    @Published private(set) var promptText = ""
+    @Published private var results = SessionResults.empty
     @Published private(set) var logLines: [String] = []
 
     @Published private(set) var isPlaying = false
@@ -198,9 +204,9 @@ final class AppModel: ObservableObject {
 
     var currentResultText: String {
         switch resultKind {
-        case .transcript: transcriptText
-        case .notes: notesText
-        case .prompt: promptText
+        case .transcript: results.transcript
+        case .notes: results.notes
+        case .prompt: results.prompt
         }
     }
 
@@ -267,33 +273,38 @@ final class AppModel: ObservableObject {
 
     func loadSelectedSession() {
         stopPlayback()
-        transcriptText = ""
-        notesText = ""
-        promptText = ""
-        guard let session = selectedSession else { return }
+        guard let session = selectedSession else {
+            results = .empty
+            return
+        }
 
+        var transcript = ""
+        var notes = ""
+        var prompt = ""
         if session.transcriptJSONURL != nil, let sessionStore {
             do {
                 let document = try sessionStore.loadTranscript(sessionID: session.id)
-                transcriptText = document.segments.map(Self.formatSegment).joined(separator: "\n")
+                transcript = document.segments.map(Self.formatSegment).joined(separator: "\n")
             } catch {
                 presentError("전사 결과 불러오기 실패", error)
             }
         }
         if let url = session.transcriptMarkdownURL {
             do {
-                notesText = try String(contentsOf: url, encoding: .utf8)
+                notes = try String(contentsOf: url, encoding: .utf8)
             } catch {
                 presentError("Markdown 결과 불러오기 실패", error)
             }
         }
         if let url = session.promptURL {
             do {
-                promptText = try String(contentsOf: url, encoding: .utf8)
+                prompt = try String(contentsOf: url, encoding: .utf8)
             } catch {
                 presentError("AI 요약 프롬프트 불러오기 실패", error)
             }
         }
+        let loaded = SessionResults(transcript: transcript, notes: notes, prompt: prompt)
+        if results != loaded { results = loaded }
     }
 
     func startRecording() async {
@@ -551,7 +562,9 @@ final class AppModel: ObservableObject {
         guard let sessionStore else { return }
         do {
             try sessionStore.rename(sessionID: id, name: name)
-            refreshSessions(preferredID: id)
+            guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            sessions[index].name = trimmed.isEmpty ? nil : trimmed
         } catch {
             presentError("이름 변경 실패", error)
         }
@@ -570,9 +583,7 @@ final class AppModel: ObservableObject {
             let result = try sessionStore.delete(sessionID: id, activeSessionID: activeSessionID)
             if selectedSessionID == id {
                 stopPlayback()
-                transcriptText = ""
-                notesText = ""
-                promptText = ""
+                results = .empty
             }
             refreshSessions()
             if !result.errors.isEmpty {
@@ -721,9 +732,9 @@ final class AppModel: ObservableObject {
         playbackTask = nil
         audioPlayer?.stop()
         audioPlayer = nil
-        isPlaying = false
-        playbackPosition = 0
-        playbackDuration = 0
+        if isPlaying { isPlaying = false }
+        if playbackPosition != 0 { playbackPosition = 0 }
+        if playbackDuration != 0 { playbackDuration = 0 }
     }
 
     private func nativeExitCallback(generation: UUID) -> @Sendable (Result<ProcessResult, Error>) -> Void {

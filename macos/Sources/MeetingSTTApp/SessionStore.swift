@@ -127,7 +127,7 @@ public enum MetadataValue: Sendable {
 public struct RecordingSession: Identifiable, Equatable, Sendable {
     public let id: String
     public let directoryURL: URL
-    public let name: String?
+    public var name: String?
     public let status: String
     public let source: String?
     public let deviceID: AudioDeviceID?
