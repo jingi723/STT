@@ -50,6 +50,16 @@ def cmd_notes(args) -> int:
     if args.prompt_only:
         out = generate_prompt(data, project=project)
         out_path = jpath.with_suffix(".prompt.md")  # AI 요약용은 별도(요청 시에만)
+    elif getattr(args, "ai", False):
+        from .notes import generate_ai_notes
+
+        print("claude CLI로 요약 생성 중… (수 분 걸릴 수 있습니다)", file=sys.stderr)
+        try:
+            out = generate_ai_notes(data, project=project, wiki=args.wiki)
+        except Exception as exc:  # CLI 미설치·미로그인·타임아웃 → 템플릿으로 폴백
+            print(f"AI 요약 실패({exc}). 템플릿 회의록으로 대체합니다.", file=sys.stderr)
+            out = generate_local_notes(data, None)
+        out_path = jpath.with_suffix(".md")
     else:
         wiki_ctx = read_context(args.wiki, project=project) if args.wiki else None
         out = generate_local_notes(data, wiki_ctx)
@@ -70,7 +80,7 @@ def cmd_run(args) -> int:
     jpath = Config.from_cwd().outputs_dir / f"{stem}.json"
     notes_args = argparse.Namespace(
         transcript_json=str(jpath), wiki=args.wiki, project=args.project,
-        prompt_only=args.prompt_only,
+        prompt_only=args.prompt_only, ai=getattr(args, "ai", False),
     )
     return cmd_notes(notes_args)
 
@@ -148,12 +158,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_n.add_argument("--project", default=None, help="프로젝트명")
     p_n.add_argument("--prompt-only", action="store_true",
                      help="회의록 대신 AI Agent용 요약 프롬프트를 출력")
+    p_n.add_argument("--ai", action="store_true",
+                     help="claude CLI(로그인 계정)로 회의록을 자동 요약. API 키 불필요")
     p_n.set_defaults(func=cmd_notes)
 
     p_r = sub.add_parser("run", help="transcribe + notes 전체 실행")
     _add_transcribe_args(p_r)
     p_r.add_argument("--wiki", default=None, help="LLM-Wiki 경로")
     p_r.add_argument("--prompt-only", action="store_true", help="AI 요약 프롬프트 출력")
+    p_r.add_argument("--ai", action="store_true", help="claude CLI로 회의록 자동 요약")
     p_r.set_defaults(func=cmd_run)
 
     p_w = sub.add_parser("init-wiki", help="LLM-Wiki 폴더 구조 스캐폴딩")

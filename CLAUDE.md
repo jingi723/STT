@@ -30,6 +30,7 @@
 | 2026-06-25 | 시스템 전체 출력 캡처 + 녹음 하트비트 | apptap.swift(`record-system`=stereoGlobalTapButExcludeProcesses 전역탭 + 200ms RMS `LEVEL` stdout), capture.py(`SystemRecorder`/`_NativeRecorder`/`Recorder.level`/`buffered_bytes`), server.py(source=system, `GET /api/record/status`), web/index.html(🔊시스템출력 옵션·박동점·VU·기록량·무신호 경고, 400ms 폴링) | 사용자 피드백: 비슷한 프로세스명이 많아 앱 선택이 어려움 → 출력 전체 녹음 + 녹음 동작 확인용 하트비트 |
 | 2026-06-27 | 영구 녹음 세션 워크플로우 반영 | dashboard/audio-capture agents, web-dashboard/audio-capture/stt-build-orchestrator skills, CLAUDE.md | 녹음을 `outputs/recordings/{timestamp_slug}/audio.wav`+`metadata.json`으로 저장하고 재시작 후 재생·미전사 목록·나중 전사를 지원 |
 | 2026-07-03 | 대시보드 토스 스타일 리디자인 + 세션 관리 기능 | web/index.html(토스 스타일 라이트/다크·#3182F6·Pretendard·자체완결), server.py(`POST /api/recordings/{id}/rename`→metadata `name`, `DELETE /api/recordings/{id}`→폴더+transcript .md/.json 고아삭제, `_recording_payload`에 name 노출), 전사 복사 버튼(clipboard+폴백) | 사용자 요청: 전사 결과 복사·세션 이름 수정·세션 삭제 + 새 디자인 적용 |
+| 2026-08-15 | 회의록 자동 요약(`--ai`) | notes.py(`generate_ai_notes`, `claude -p` 호출), cli.py(notes/run `--ai`), ContentView "AI 회의록" 버튼, tests/test_ai_notes.py | 요약이 수동(프롬프트 복붙)이었음. API 키 대신 기존 Claude Code 로그인 사용 |
 | 2026-07-13 | SwiftUI 네이티브 앱 전환 | macos/MeetingSTTApp(AppModel·ContentView·SessionStore·ProcessRunner·DeviceRecorder), build.sh app, STT실행.app | 브라우저 없이 입력·시스템·앱 녹음, 세션, 재생, 전사와 회의록을 관리하고 기존 Python ML worker를 재사용 |
 
 ## 환경 현황 (2026-07-13)

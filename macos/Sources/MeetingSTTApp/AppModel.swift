@@ -506,7 +506,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func generateNotes(promptOnly: Bool) async {
+    func generateNotes(promptOnly: Bool, ai: Bool = false) async {
         guard activity == .idle, let processRunner, let environment, let session = selectedSession,
               let transcriptURL = session.transcriptJSONURL
         else {
@@ -525,7 +525,10 @@ final class AppModel: ObservableObject {
         let trimmedProject = project.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedProject.isEmpty { arguments += ["--project", trimmedProject] }
         if promptOnly { arguments.append("--prompt-only") }
-        appendLog(promptOnly ? "AI 요약 프롬프트 생성 시작: \(session.id)" : "회의록 생성 시작: \(session.id)")
+        if ai { arguments.append("--ai") }
+        appendLog(promptOnly ? "AI 요약 프롬프트 생성 시작: \(session.id)"
+                  : ai ? "AI 회의록 생성 시작(claude CLI): \(session.id)"
+                  : "회의록 생성 시작: \(session.id)")
 
         do {
             _ = try await processRunner.runPython(

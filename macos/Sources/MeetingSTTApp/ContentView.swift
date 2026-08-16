@@ -381,6 +381,10 @@ struct ContentView: View {
                         Task { await model.generateNotes(promptOnly: false) }
                     }
                     .disabled(!model.canGenerateNotes)
+                    Button("AI 회의록") {
+                        Task { await model.generateNotes(promptOnly: false, ai: true) }
+                    }
+                    .disabled(!model.canGenerateNotes)
                     Button("AI 요약 프롬프트") {
                         Task { await model.generateNotes(promptOnly: true) }
                     }

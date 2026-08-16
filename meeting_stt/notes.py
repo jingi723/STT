@@ -79,6 +79,52 @@ def generate_local_notes(data: dict, wiki_ctx: Dict[str, str] | None = None) -> 
     return "\n".join(md)
 
 
+def _claude_cli() -> str:
+    """Claude Code CLI 경로. GUI 앱은 PATH가 빈약해 홈 설치 경로까지 직접 확인한다."""
+    import os
+    import shutil
+
+    found = shutil.which("claude")
+    if found:
+        return found
+    for cand in (os.path.expanduser("~/.local/bin/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"):
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    raise RuntimeError("claude CLI를 찾을 수 없습니다. Claude Code 설치 후 `claude` 로그인이 필요합니다.")
+
+
+def generate_ai_notes(data: dict, project: str = "My-app", wiki: str | None = None,
+                      timeout: int = 900) -> str:
+    """`claude -p`로 자동 요약. 기존 Claude Code 로그인을 쓰므로 API 키가 필요 없다.
+
+    전사 원문은 회의당 한 파일 규약대로 요약 뒤에 붙인다."""
+    import subprocess
+    import tempfile
+
+    prompt = generate_prompt(data, project=project)
+    if wiki:
+        prompt = f"LLM-Wiki 루트: {wiki}\n\n{prompt}"
+    else:
+        # 위키가 없으면 참고 파일을 찾아 홈 디렉터리·외부 서비스를 뒤지는 것을 막는다
+        prompt = ("참고할 LLM-Wiki가 없습니다. 아래 위키 파일 참조 단계는 건너뛰고, "
+                  "파일 탐색이나 외부 검색 없이 transcript만으로 작성하세요.\n\n") + prompt
+
+    proc = subprocess.run(
+        [_claude_cli(), "-p", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}'],
+        input=prompt,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        cwd=tempfile.gettempdir(),  # 저장소 CLAUDE.md/스킬이 요약 프롬프트에 섞이지 않도록
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"claude CLI 실패(rc={proc.returncode}): {proc.stderr.strip()[:500]}")
+    notes = proc.stdout.strip()
+    if not notes:
+        raise RuntimeError("claude CLI가 빈 응답을 반환했습니다. `claude` 로그인 상태를 확인하세요.")
+    return f"{notes}\n\n---\n\n## 원본 전사\n\n```\n{format_transcript_text(data)}\n```\n"
+
+
 def generate_prompt(data: dict, project: str = "My-app") -> str:
     """AI Agent(Claude Code/Codex)용 LLM-Wiki 참조 요약 프롬프트. transcript 포함."""
     transcript = format_transcript_text(data)
