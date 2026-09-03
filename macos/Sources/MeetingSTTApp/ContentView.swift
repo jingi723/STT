@@ -7,7 +7,11 @@ struct ContentView: View {
     @State private var renameSessionID: String?
     @State private var renameDraft = ""
     @State private var deleteSessionID: String?
+    @State private var transcriptSearchText = ""
+    @State private var transcriptSearchMatches: [NSRange] = []
+    @State private var selectedTranscriptMatch = 0
     @FocusState private var renameFieldFocused: Bool
+    @FocusState private var transcriptSearchFocused: Bool
 
     var body: some View {
         NavigationSplitView {
@@ -65,6 +69,9 @@ struct ContentView: View {
         } message: {
             Text("녹음과 이 세션에서 만든 전사·회의록 파일이 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.")
         }
+        .onChange(of: transcriptSearchText) { _, _ in updateTranscriptSearch() }
+        .onChange(of: model.currentResultText) { _, _ in updateTranscriptSearch() }
+        .onChange(of: model.resultKind) { _, _ in updateTranscriptSearch() }
     }
 
     private var sessionSidebar: some View {
@@ -397,6 +404,10 @@ struct ContentView: View {
                     .disabled(model.currentResultText.isEmpty)
                 }
 
+                if model.resultKind == .transcript, !model.currentResultText.isEmpty {
+                    transcriptSearchBar
+                }
+
                 if model.currentResultText.isEmpty {
                     ContentUnavailableView(
                         "표시할 결과가 없습니다",
@@ -405,12 +416,113 @@ struct ContentView: View {
                     )
                     .frame(minHeight: Layout.resultMinimumHeight)
                 } else {
-                    ResultTextView(text: model.currentResultText)
+                    ResultTextView(
+                        text: model.currentResultText,
+                        matchRanges: model.resultKind == .transcript ? transcriptSearchMatches : [],
+                        selectedMatchIndex: selectedTranscriptMatch
+                    )
                     .frame(minHeight: Layout.resultMinimumHeight, maxHeight: Layout.resultMaximumHeight)
                 }
             }
             .padding(Layout.xSmall)
         }
+    }
+
+    private var transcriptSearchBar: some View {
+        HStack(spacing: Layout.small) {
+            Button { transcriptSearchFocused = true } label: {
+                Label("전사 검색", systemImage: "magnifyingglass")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .keyboardShortcut("f", modifiers: .command)
+            .help("전사 검색 (⌘F)")
+            TextField("전사 내용 검색", text: $transcriptSearchText)
+                .textFieldStyle(.plain)
+                .focused($transcriptSearchFocused)
+                .onSubmit { selectNextTranscriptMatch() }
+
+            if !transcriptSearchText.isEmpty {
+                Text(transcriptSearchCountText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("검색 결과 \(transcriptSearchCountText)")
+
+                Button { selectPreviousTranscriptMatch() } label: {
+                    Label("이전 검색 결과", systemImage: "chevron.up")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(transcriptSearchMatches.isEmpty)
+
+                Button { selectNextTranscriptMatch() } label: {
+                    Label("다음 검색 결과", systemImage: "chevron.down")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(transcriptSearchMatches.isEmpty)
+
+                Button {
+                    transcriptSearchText = ""
+                    transcriptSearchFocused = true
+                } label: {
+                    Label("검색어 지우기", systemImage: "xmark.circle.fill")
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, Layout.medium)
+        .padding(.vertical, Layout.small)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: Layout.small))
+    }
+
+    private var transcriptSearchCountText: String {
+        guard !transcriptSearchMatches.isEmpty else { return "0개" }
+        return "\(selectedTranscriptMatch + 1)/\(transcriptSearchMatches.count)"
+    }
+
+    private func updateTranscriptSearch() {
+        guard model.resultKind == .transcript else {
+            transcriptSearchMatches = []
+            selectedTranscriptMatch = 0
+            return
+        }
+        transcriptSearchMatches = Self.matchRanges(
+            in: model.currentResultText,
+            query: transcriptSearchText
+        )
+        selectedTranscriptMatch = 0
+    }
+
+    private func selectPreviousTranscriptMatch() {
+        guard !transcriptSearchMatches.isEmpty else { return }
+        selectedTranscriptMatch = (selectedTranscriptMatch - 1 + transcriptSearchMatches.count)
+            % transcriptSearchMatches.count
+    }
+
+    private func selectNextTranscriptMatch() {
+        guard !transcriptSearchMatches.isEmpty else { return }
+        selectedTranscriptMatch = (selectedTranscriptMatch + 1) % transcriptSearchMatches.count
+    }
+
+    private static func matchRanges(in text: String, query: String) -> [NSRange] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty, !text.isEmpty else { return [] }
+
+        let source = text as NSString
+        let options: NSString.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        var ranges: [NSRange] = []
+        var searchRange = NSRange(location: 0, length: source.length)
+
+        while searchRange.length > 0 {
+            let match = source.range(of: needle, options: options, range: searchRange)
+            guard match.location != NSNotFound else { break }
+            ranges.append(match)
+            let nextLocation = NSMaxRange(match)
+            searchRange = NSRange(location: nextLocation, length: source.length - nextLocation)
+        }
+        return ranges
     }
 
     private var logSection: some View {
@@ -463,6 +575,16 @@ struct ContentView: View {
 
 private struct ResultTextView: NSViewRepresentable {
     let text: String
+    let matchRanges: [NSRange]
+    let selectedMatchIndex: Int
+
+    final class Coordinator {
+        var text = ""
+        var matchRanges: [NSRange] = []
+        var selectedMatchIndex = 0
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
@@ -492,8 +614,41 @@ private struct ResultTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView, textView.string != text else { return }
-        textView.string = text
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        let coordinator = context.coordinator
+        guard coordinator.text != text
+            || coordinator.matchRanges != matchRanges
+            || coordinator.selectedMatchIndex != selectedMatchIndex
+        else { return }
+
+        if coordinator.text != text {
+            textView.string = text
+            textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            textView.textColor = .labelColor
+        }
+
+        let fullRange = NSRange(location: 0, length: (text as NSString).length)
+        textView.textStorage?.removeAttribute(.backgroundColor, range: fullRange)
+        for range in matchRanges {
+            textView.textStorage?.addAttribute(
+                .backgroundColor,
+                value: NSColor.systemYellow.withAlphaComponent(0.32),
+                range: range
+            )
+        }
+        if matchRanges.indices.contains(selectedMatchIndex) {
+            let selectedRange = matchRanges[selectedMatchIndex]
+            textView.textStorage?.addAttribute(
+                .backgroundColor,
+                value: NSColor.controlAccentColor.withAlphaComponent(0.48),
+                range: selectedRange
+            )
+            textView.scrollRangeToVisible(selectedRange)
+        }
+
+        coordinator.text = text
+        coordinator.matchRanges = matchRanges
+        coordinator.selectedMatchIndex = selectedMatchIndex
     }
 }
 
