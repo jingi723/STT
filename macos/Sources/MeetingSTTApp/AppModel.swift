@@ -107,6 +107,7 @@ final class AppModel: ObservableObject {
     private var processRunner: ProcessRunner?
     private var nativeRecorder: NativeRecorder?
     private let deviceRecorder = DeviceRecorder()
+    private let completionNotifier = CompletionNotifier.shared
 
     private var didStart = false
     private var activeSessionID: String?
@@ -456,6 +457,8 @@ final class AppModel: ObservableObject {
             presentError("전사 시작 실패", MeetingSTTCoreError.recording("전사할 녹음 파일이 없습니다."))
             return
         }
+        await completionNotifier.requestAuthorizationIfNeeded()
+        let notificationSessionTitle = sessionTitle(session)
 
         let generation = UUID()
         workerGeneration = generation
@@ -499,6 +502,10 @@ final class AppModel: ObservableObject {
             appendLog("전사 완료: \(jsonURL.path)")
             if preferredID == sessionID { resultKind = .transcript }
             refreshSessions(preferredID: preferredID)
+            await completionNotifier.notifyTranscriptionCompleted(
+                sessionTitle: notificationSessionTitle,
+                sessionID: sessionID
+            )
         } catch {
             guard workerGeneration == generation else { return }
             workerGeneration = nil
