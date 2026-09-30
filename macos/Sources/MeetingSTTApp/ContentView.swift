@@ -95,7 +95,7 @@ struct ContentView: View {
                             }
                     }
                 }
-                .onChange(of: model.selectedSessionID) { _, _ in model.loadSelectedSession() }
+                .onChange(of: model.selectedSessionID) { _, _ in Task { await model.loadSelectedSession() } }
             }
         }
         .navigationTitle("저장된 녹음")
@@ -216,7 +216,7 @@ struct ContentView: View {
                                 .monospacedDigit()
                         }
                         GridRow {
-                            Text(model.captureSource == .device ? "입력 레벨" : "출력 레벨")
+                            Text(model.captureSource == .systemAndMic ? "입출력 레벨" : (model.captureSource == .device ? "입력 레벨" : "출력 레벨"))
                             HStack(spacing: Layout.small) {
                                 ProgressView(value: model.rmsLevel, total: 1)
                                     .frame(minWidth: Layout.compactControl)
@@ -224,7 +224,7 @@ struct ContentView: View {
                                     .monospacedDigit()
                                     .frame(width: 44, alignment: .trailing)
                             }
-                            .accessibilityLabel(model.captureSource == .device ? "입력 레벨" : "출력 레벨")
+                            .accessibilityLabel(model.captureSource == .systemAndMic ? "입출력 레벨" : (model.captureSource == .device ? "입력 레벨" : "출력 레벨"))
                             .accessibilityValue(model.rmsLevel.formatted(.percent.precision(.fractionLength(0))))
                         }
                     }
@@ -237,7 +237,11 @@ struct ContentView: View {
     @ViewBuilder
     private var sourcePicker: some View {
         switch model.captureSource {
-        case .device:
+        case .device, .systemAndMic:
+            if model.captureSource == .systemAndMic {
+                Text("Mac의 모든 출력 소리와 선택한 마이크를 함께 녹음합니다.")
+                    .foregroundStyle(.secondary)
+            }
             LabeledContent("입력 장치") {
                 HStack(spacing: Layout.small) {
                     Picker("입력 장치", selection: $model.selectedDeviceID) {

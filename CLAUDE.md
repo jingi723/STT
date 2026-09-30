@@ -17,6 +17,7 @@
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
+| 2026-09-30 | 시스템 출력 + 마이크 기본 모드, host time 동기화, 원본 보존 및 WAV 합성 | AppModel·RecordingMixer·DeviceRecorder·ProcessRunner·apptap, 독립 녹음 테스트 | PID 선택 없이 회의 입출력 동시 녹음 |
 | 2026-06-20 | 초기 구성 | 전체 (agents 4, skills 4) | - |
 | 2026-06-20 | Whisper 제거, Qwen3 단일 모델 | 전 에이전트/스킬 | 사용자 피드백: 모델 둘 다 받을 필요 없음 |
 | 2026-06-20 | 노트북 버그 수정 명시 | asr-diarization 스킬 | soundfile import 누락 등 |

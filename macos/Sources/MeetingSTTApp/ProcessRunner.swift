@@ -178,7 +178,7 @@ public final class NativeRecorder {
             )
         }
         let bytes = try Self.validateWAV(recording.outputURL)
-        return RecordingStats(duration: Date().timeIntervalSince(recording.startedAt), bytes: bytes)
+        return RecordingStats(duration: Date().timeIntervalSince(recording.startedAt), bytes: bytes, startedHostTime: recording.firstHostTime)
     }
 
     public func cancel() {
@@ -282,6 +282,8 @@ private final class NativeRecording: @unchecked Sendable {
     private let onLevel: @Sendable (Double) -> Void
     private let onLog: @Sendable (String) -> Void
     private let onExit: @Sendable (Result<ProcessResult, Error>) -> Void
+    private var audioStart: Double?
+    var firstHostTime: Double? { stateLock.withLock { audioStart } }
     private var started = false
     private var draining = false
 
@@ -315,7 +317,9 @@ private final class NativeRecording: @unchecked Sendable {
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             drain(self.stdout.fileHandleForReading, buffer: self.stdoutBuffer) { [self] line in
-                if line.hasPrefix("LEVEL "), let value = Double(line.dropFirst(6)) {
+                if line.hasPrefix("START_HOST "), let value = Double(line.dropFirst(11)) {
+                    self.stateLock.withLock { self.audioStart = value }
+                } else if line.hasPrefix("LEVEL "), let value = Double(line.dropFirst(6)) {
                     self.onLevel(value)
                 } else if !line.isEmpty {
                     self.onLog(line)
@@ -366,7 +370,7 @@ private final class NativeRecording: @unchecked Sendable {
     }
 }
 
-private enum ProcessExecution {
+enum ProcessExecution {
     static func run(
         process: Process,
         executable: URL,

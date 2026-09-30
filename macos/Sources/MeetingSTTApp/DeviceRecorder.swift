@@ -1,3 +1,4 @@
+import AVFoundation
 import AudioToolbox
 import CoreAudio
 import Foundation
@@ -12,6 +13,7 @@ public struct AudioInputDevice: Identifiable, Equatable, Sendable {
 public struct RecordingStats: Equatable, Sendable {
     public let duration: TimeInterval
     public let bytes: Int64
+    public var startedHostTime: TimeInterval? = nil
 }
 
 public final class DeviceRecorder {
@@ -22,6 +24,7 @@ public final class DeviceRecorder {
     private var outputURL: URL?
     private var sampleRate = 0.0
     private var framesWritten: UInt64 = 0
+    private var firstHostTime: TimeInterval?
     private var sumSquares = 0.0
     private var sampleCount: UInt64 = 0
     private var lastSamplesAt = Date.distantPast
@@ -170,6 +173,7 @@ public final class DeviceRecorder {
             self.sampleRate = sourceFormat.mSampleRate
             self.inputFormat = sourceFormat
             self.framesWritten = 0
+            self.firstHostTime = nil
             self.sumSquares = 0
             self.sampleCount = 0
             self.lastSamplesAt = Date.distantPast
@@ -226,14 +230,17 @@ public final class DeviceRecorder {
         guard let outputURL else { throw MeetingSTTCoreError.recording("녹음 출력 경로가 없습니다.") }
         let bytes = try Self.validateWAV(outputURL)
         let duration = sampleRate > 0 ? Double(framesWritten) / sampleRate : 0
-        return RecordingStats(duration: duration, bytes: bytes)
+        return RecordingStats(duration: duration, bytes: bytes, startedHostTime: firstHostTime)
     }
 
-    fileprivate func write(_ inputData: UnsafePointer<AudioBufferList>) -> OSStatus {
+    fileprivate func write(_ inputData: UnsafePointer<AudioBufferList>, timestamp: AudioTimeStamp) -> OSStatus {
         guard let audioFile else { return kAudio_ParamError }
         let bytesPerFrame = inputFormat.mBytesPerFrame
         guard bytesPerFrame > 0 else { return kAudio_ParamError }
         let frames = inputData.pointee.mBuffers.mDataByteSize / bytesPerFrame
+        if frames > 0, firstHostTime == nil, timestamp.mFlags.contains(.hostTimeValid) {
+            firstHostTime = AVAudioTime.seconds(forHostTime: timestamp.mHostTime)
+        }
         accumulateRMS(inputData)
         let status = ExtAudioFileWriteAsync(audioFile, frames, inputData)
         if status == noErr { framesWritten &+= UInt64(frames) }
@@ -353,8 +360,8 @@ public final class DeviceRecorder {
 }
 
 private let deviceRecorderIOProc: AudioDeviceIOProc = {
-    _, _, inputData, _, _, _, context in
+    _, _, inputData, inputTime, _, _, context in
     guard let context else { return noErr }
     let recorder = Unmanaged<DeviceRecorder>.fromOpaque(context).takeUnretainedValue()
-    return recorder.write(inputData)
+    return recorder.write(inputData, timestamp: inputTime.pointee)
 }

@@ -169,10 +169,13 @@ public struct DeletionResult: Equatable, Sendable {
     public let errors: [String]
 }
 
-public final class SessionStore {
+/// 저장 프로퍼티가 전부 `let`이고 metadata 쓰기는 `lock`으로 직렬화된다 — 백그라운드에서 호출해도 안전하다.
+public final class SessionStore: @unchecked Sendable {
     public let environment: ProjectEnvironment
     private let fileManager: FileManager
     private let lock = NSLock()
+    /// outputs 루트를 심링크 해석한 결과. 경로 검사마다 다시 해석하면 세션 수만큼 경로 전체를 lstat으로 걷게 된다.
+    private let outputsComponents: [String]
 
     public convenience init(rootURL: URL) throws {
         try self.init(environment: ProjectEnvironment(rootURL: rootURL))
@@ -181,6 +184,7 @@ public final class SessionStore {
     public init(environment: ProjectEnvironment, fileManager: FileManager = .default) throws {
         self.environment = environment
         self.fileManager = fileManager
+        self.outputsComponents = environment.outputsURL.standardizedFileURL.resolvingSymlinksInPath().pathComponents
         try fileManager.createDirectory(at: environment.recordingsURL, withIntermediateDirectories: true)
     }
 
@@ -227,7 +231,7 @@ public final class SessionStore {
 
     public func create(source: String, device: AudioDeviceID? = nil, pid: pid_t? = nil) throws -> RecordingSession {
         try lock.withLock {
-            guard ["device", "app", "system"].contains(source) else {
+            guard ["device", "app", "system", "systemAndMic"].contains(source) else {
                 throw MeetingSTTCoreError.recording("지원하지 않는 녹음 소스입니다: \(source)")
             }
             let formatter = DateFormatter()
@@ -441,12 +445,17 @@ public final class SessionStore {
         return isInsideOutputs(resolved) && fileManager.fileExists(atPath: resolved.path) ? resolved : nil
     }
 
-    private func isInsideOutputs(_ url: URL) -> Bool { isInside(url, parent: environment.outputsURL) }
+    /// 인자는 호출 전에 심링크가 해석돼 있어야 한다 — 모든 호출자가 그렇게 넘긴다.
+    private func isInsideOutputs(_ resolved: URL) -> Bool {
+        Self.hasPrefix(resolved.pathComponents, outputsComponents)
+    }
 
-    private func isInside(_ url: URL, parent: URL) -> Bool {
-        let childComponents = url.standardizedFileURL.resolvingSymlinksInPath().pathComponents
-        let parentComponents = parent.standardizedFileURL.resolvingSymlinksInPath().pathComponents
-        return childComponents.count > parentComponents.count && childComponents.prefix(parentComponents.count).elementsEqual(parentComponents)
+    private func isInside(_ resolved: URL, parent resolvedParent: URL) -> Bool {
+        Self.hasPrefix(resolved.pathComponents, resolvedParent.pathComponents)
+    }
+
+    private static func hasPrefix(_ child: [String], _ parent: [String]) -> Bool {
+        child.count > parent.count && child.prefix(parent.count).elementsEqual(parent)
     }
 
     private func isValidWAV(_ url: URL) -> Bool {

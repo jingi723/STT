@@ -99,6 +99,8 @@ final class Recorder {
     var levelLock = os_unfair_lock_s()
     var sumSquares: Double = 0
     var sampleCount: UInt64 = 0
+    var firstHostTime: Double?
+    var emittedStart = false
 
     func fail(_ msg: String) -> Never {
         FileHandle.standardError.write(("[apptap] " + msg + "\n").data(using: .utf8)!)
@@ -200,9 +202,14 @@ final class Recorder {
         os_unfair_lock_lock(&levelLock)
         let s = sumSquares
         let c = sampleCount
+        let start = firstHostTime
         sumSquares = 0
         sampleCount = 0
         os_unfair_lock_unlock(&levelLock)
+        if !emittedStart, let start {
+            FileHandle.standardOutput.write("START_HOST \(start)\n".data(using: .utf8)!)
+            emittedStart = true
+        }
         let rms = c > 0 ? (s / Double(c)).squareRoot() : 0.0
         let line = c > 0 ? String(format: "LEVEL %.6f\n", rms) : "LEVEL 0.0\n"
         FileHandle.standardOutput.write(line.data(using: .utf8)!)
@@ -214,6 +221,7 @@ final class Recorder {
             AudioDeviceDestroyIOProcID(aggID, p)
             procID = nil
         }
+        emitLevel()
         if aggID != kAudioObjectUnknown { AudioHardwareDestroyAggregateDevice(aggID); aggID = kAudioObjectUnknown }
         if tapID != kAudioObjectUnknown { AudioHardwareDestroyProcessTap(tapID); tapID = kAudioObjectUnknown }
         if let f = extFile { ExtAudioFileDispose(f); extFile = nil }
@@ -222,7 +230,7 @@ final class Recorder {
 
 // IOProc (전역 C 함수) — context에서 Recorder를 꺼내 wav 기록 + RMS 누적.
 // 실시간 스레드이므로 ExtAudioFileWriteAsync(실시간 안전)와 짧은 락만 사용한다.
-let ioProc: AudioDeviceIOProc = { (_, _, inInputData, _, _, _, context) -> OSStatus in
+let ioProc: AudioDeviceIOProc = { (_, _, inInputData, inputTime, _, _, context) -> OSStatus in
     guard let context = context else { return noErr }
     let rec = Unmanaged<Recorder>.fromOpaque(context).takeUnretainedValue()
     guard let ext = rec.extFile else { return noErr }
@@ -231,6 +239,12 @@ let ioProc: AudioDeviceIOProc = { (_, _, inInputData, _, _, _, context) -> OSSta
     let firstSize = buffers.mBuffers.mDataByteSize
     let frames = firstSize / bytesPerFrame
     if frames == 0 { return noErr }
+
+    os_unfair_lock_lock(&rec.levelLock)
+    if rec.firstHostTime == nil, inputTime.pointee.mFlags.contains(.hostTimeValid) {
+        rec.firstHostTime = AVAudioTime.seconds(forHostTime: inputTime.pointee.mHostTime)
+    }
+    os_unfair_lock_unlock(&rec.levelLock)
 
     // RMS 누적 (Float32, interleaved/non-interleaved 모두 모든 buffer 순회).
     if rec.asbd.mFormatID == kAudioFormatLinearPCM,

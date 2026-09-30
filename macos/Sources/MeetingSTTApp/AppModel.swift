@@ -5,6 +5,7 @@ import CoreAudio
 import Foundation
 
 enum CaptureSource: String, CaseIterable, Identifiable {
+    case systemAndMic
     case device
     case system
     case app
@@ -13,6 +14,7 @@ enum CaptureSource: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .systemAndMic: "시스템 출력 + 마이크"
         case .device: "입력 장치"
         case .system: "시스템 출력"
         case .app: "앱 오디오"
@@ -21,6 +23,7 @@ enum CaptureSource: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .systemAndMic: "mic.and.signal.meter"
         case .device: "mic"
         case .system: "speaker.wave.2"
         case .app: "macwindow"
@@ -62,7 +65,7 @@ enum ResultKind: String, CaseIterable, Identifiable {
     }
 }
 
-private struct SessionResults: Equatable {
+private struct SessionResults: Equatable, Sendable {
     let transcript: String
     let notes: String
     let prompt: String
@@ -76,7 +79,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var rootPath = ""
 
-    @Published var captureSource: CaptureSource = .device
+    @Published var captureSource: CaptureSource = .systemAndMic
     @Published private(set) var devices: [AudioInputDevice] = []
     @Published var selectedDeviceID: AudioDeviceID?
     @Published private(set) var apps: [AppAudioSource] = []
@@ -165,7 +168,7 @@ final class AppModel: ObservableObject {
     var canStartRecording: Bool {
         guard activity == .idle, environment != nil else { return false }
         switch captureSource {
-        case .device: return selectedDeviceID != nil
+        case .device, .systemAndMic: return selectedDeviceID != nil
         case .system: return true
         case .app: return selectedAppPID != nil
         }
@@ -261,51 +264,70 @@ final class AppModel: ObservableObject {
     }
 
     func refreshSessions(preferredID: String? = nil) {
+        Task { await reloadSessions(preferredID: preferredID) }
+    }
+
+    /// 목록 한 번 읽는 데 세션 수만큼 metadata 읽기와 stat이 든다 — MainActor 밖에서 돌린다.
+    func reloadSessions(preferredID: String? = nil) async {
         guard activeSessionID == nil, let sessionStore else { return }
+        let previous = preferredID ?? selectedSessionID
         do {
-            let previous = preferredID ?? selectedSessionID
-            sessions = try sessionStore.list()
-            selectedSessionID = sessions.contains(where: { $0.id == previous }) ? previous : sessions.first?.id
-            loadSelectedSession()
+            let loaded = try await Task.detached(priority: .userInitiated) { try sessionStore.list() }.value
+            sessions = loaded
+            selectedSessionID = loaded.contains(where: { $0.id == previous }) ? previous : loaded.first?.id
+            await loadSelectedSession()
         } catch {
             presentError("녹음 목록 새로고침 실패", error)
         }
     }
 
-    func loadSelectedSession() {
+    /// 3시간 회의면 전사·회의록이 수십만 자다. 디코딩과 파일 읽기를 MainActor 밖으로 뺀다.
+    func loadSelectedSession() async {
         stopPlayback()
-        guard let session = selectedSession else {
+        guard let session = selectedSession, let sessionStore else {
             results = .empty
             return
         }
 
-        var transcript = ""
-        var notes = ""
-        var prompt = ""
-        if session.transcriptJSONURL != nil, let sessionStore {
-            do {
-                let document = try sessionStore.loadTranscript(sessionID: session.id)
-                transcript = document.segments.map(Self.formatSegment).joined(separator: "\n")
-            } catch {
-                presentError("전사 결과 불러오기 실패", error)
+        let id = session.id
+        let hasTranscript = session.transcriptJSONURL != nil
+        let markdownURL = session.transcriptMarkdownURL
+        let promptURL = session.promptURL
+
+        let (loaded, failures) = await Task.detached(priority: .userInitiated) { () -> (SessionResults, [String]) in
+            var failures: [String] = []
+            var transcript = ""
+            var notes = ""
+            var prompt = ""
+            if hasTranscript {
+                do {
+                    let document = try sessionStore.loadTranscript(sessionID: id)
+                    transcript = document.segments.map(Self.formatSegment).joined(separator: "\n")
+                } catch {
+                    failures.append("전사 결과 불러오기 실패: \(error.localizedDescription)")
+                }
             }
-        }
-        if let url = session.transcriptMarkdownURL {
-            do {
-                notes = try String(contentsOf: url, encoding: .utf8)
-            } catch {
-                presentError("Markdown 결과 불러오기 실패", error)
+            if let markdownURL {
+                do {
+                    notes = try String(contentsOf: markdownURL, encoding: .utf8)
+                } catch {
+                    failures.append("Markdown 결과 불러오기 실패: \(error.localizedDescription)")
+                }
             }
-        }
-        if let url = session.promptURL {
-            do {
-                prompt = try String(contentsOf: url, encoding: .utf8)
-            } catch {
-                presentError("AI 요약 프롬프트 불러오기 실패", error)
+            if let promptURL {
+                do {
+                    prompt = try String(contentsOf: promptURL, encoding: .utf8)
+                } catch {
+                    failures.append("AI 요약 프롬프트 불러오기 실패: \(error.localizedDescription)")
+                }
             }
-        }
-        let loaded = SessionResults(transcript: transcript, notes: notes, prompt: prompt)
+            return (SessionResults(transcript: transcript, notes: notes, prompt: prompt), failures)
+        }.value
+
+        // 읽는 사이 선택이 바뀌었으면 버린다 — 늦게 끝난 이전 세션이 새 선택을 덮어쓰지 않게.
+        guard selectedSessionID == id else { return }
         if results != loaded { results = loaded }
+        for failure in failures { presentMessage(failure) }
     }
 
     func startRecording() async {
@@ -321,7 +343,7 @@ final class AppModel: ObservableObject {
         let deviceID: AudioDeviceID?
         let pid: pid_t?
         switch captureSource {
-        case .device:
+        case .device, .systemAndMic:
             guard let selectedDeviceID else {
                 presentError("녹음 시작 실패", MeetingSTTCoreError.recording("입력 장치를 선택하세요."))
                 return
@@ -347,6 +369,12 @@ final class AppModel: ObservableObject {
         var createdSession: RecordingSession?
 
         do {
+            if captureSource == .systemAndMic { _ = try RecordingMixer.executable() }
+            if captureSource == .device || captureSource == .systemAndMic {
+                guard await AVCaptureDevice.requestAccess(for: .audio) else {
+                    throw MeetingSTTCoreError.recording("시스템 설정 > 개인정보 보호 및 보안 > 마이크에서 STT실행을 허용하세요.")
+                }
+            }
             let session = try sessionStore.create(source: captureSource.rawValue, device: deviceID, pid: pid)
             createdSession = session
             guard let audioURL = session.audioURL else {
@@ -366,6 +394,15 @@ final class AppModel: ObservableObject {
             }
 
             switch captureSource {
+            case .systemAndMic:
+                let directory = audioURL.deletingLastPathComponent()
+                try deviceRecorder.start(deviceID: deviceID!, outputURL: directory.appendingPathComponent("microphone.wav"), onLevel: { _ in })
+                try await nativeRecorder.startSystem(
+                    outputURL: directory.appendingPathComponent("system.wav"),
+                    onLevel: onLevel,
+                    onLog: logCallback(prefix: "apptap"),
+                    onExit: nativeExitCallback(generation: generation)
+                )
             case .device:
                 try deviceRecorder.start(deviceID: deviceID!, outputURL: audioURL, onLevel: onLevel)
             case .app:
@@ -393,6 +430,8 @@ final class AppModel: ObservableObject {
             sessions.insert(session, at: 0)
             selectedSessionID = session.id
         } catch {
+            _ = try? await nativeRecorder.stop()
+            if deviceRecorder.isRecording { _ = try? deviceRecorder.stop() }
             if let session = createdSession {
                 markRecordingError(sessionID: session.id, error: error)
             }
@@ -418,6 +457,15 @@ final class AppModel: ObservableObject {
         do {
             let stats: RecordingStats
             switch source {
+            case .systemAndMic:
+                let microphone = try deviceRecorder.stop()
+                let system = try await nativeRecorder.stop()
+                if system.startedHostTime == nil { appendLog("시스템 출력 오디오가 수신되지 않아 해당 트랙을 무음으로 저장합니다.") }
+                stats = try await RecordingMixer.mix(
+                    directory: audioURL.deletingLastPathComponent(),
+                    microphoneStart: microphone.startedHostTime,
+                    systemStart: system.startedHostTime
+                )
             case .device: stats = try deviceRecorder.stop()
             case .app, .system: stats = try await nativeRecorder.stop()
             }
@@ -441,6 +489,8 @@ final class AppModel: ObservableObject {
             activity = .idle
             refreshSessions(preferredID: sessionID)
         } catch {
+            _ = try? await nativeRecorder.stop()
+            if deviceRecorder.isRecording { _ = try? deviceRecorder.stop() }
             markRecordingError(sessionID: sessionID, error: error)
             clearRecordingRuntime(keepMetrics: true)
             refreshSessions(preferredID: sessionID)
@@ -700,7 +750,7 @@ final class AppModel: ObservableObject {
 
     private func receiveLevel(_ level: Double, generation: UUID) {
         guard recordingGeneration == generation else { return }
-        rmsLevel = Self.visualLevel(forRMS: level)
+        rmsLevel = Self.visualLevel(forRMS: activeSource == .systemAndMic ? max(level, deviceRecorder.level) : level)
         lastLevelAt = Date()
     }
 
@@ -714,9 +764,13 @@ final class AppModel: ObservableObject {
                     self.elapsed = Date().timeIntervalSince(startedAt)
                 }
                 if Date().timeIntervalSince(self.lastLevelAt) > 0.5 { self.rmsLevel = 0 }
-                if let audioURL = self.activeAudioURL,
-                   let size = try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? NSNumber {
-                    self.recordedBytes = size.int64Value
+                if let audioURL = self.activeAudioURL {
+                    let urls = self.activeSource == .systemAndMic
+                        ? ["microphone.wav", "system.wav"].map { audioURL.deletingLastPathComponent().appendingPathComponent($0) }
+                        : [audioURL]
+                    self.recordedBytes = urls.reduce(0) { total, url in
+                        total + (((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? NSNumber)?.int64Value ?? 0)
+                    }
                 }
             }
         }
@@ -756,6 +810,7 @@ final class AppModel: ObservableObject {
     private func nativeRecorderExited(_ result: Result<ProcessResult, Error>, generation: UUID) async {
         guard recordingGeneration == generation, case .recording = activity, let sessionID = activeSessionID else { return }
         _ = try? await nativeRecorder?.stop()
+        if deviceRecorder.isRecording { _ = try? deviceRecorder.stop() }
         let error: Error
         switch result {
         case .success(let processResult):
@@ -831,7 +886,10 @@ final class AppModel: ObservableObject {
     }
 
     private func presentError(_ title: String, _ error: Error) {
-        let message = "\(title): \(error.localizedDescription)"
+        presentMessage("\(title): \(error.localizedDescription)")
+    }
+
+    private func presentMessage(_ message: String) {
         errorMessage = message
         appendLog(message)
     }
@@ -857,11 +915,11 @@ final class AppModel: ObservableObject {
         return formatter.string(from: Date())
     }
 
-    private static func formatSegment(_ segment: TranscriptSegment) -> String {
+    private nonisolated static func formatSegment(_ segment: TranscriptSegment) -> String {
         "[\(segment.speaker)] \(clock(segment.start))~\(clock(segment.end)): \(segment.text)"
     }
 
-    private static func clock(_ seconds: TimeInterval) -> String {
+    private nonisolated static func clock(_ seconds: TimeInterval) -> String {
         let value = max(0, Int(seconds))
         return String(format: "%02d:%02d:%02d", value / 3_600, value / 60 % 60, value % 60)
     }
