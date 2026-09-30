@@ -8,7 +8,7 @@ struct MeetingSTTApp: App {
     @StateObject private var model = AppModel()
 
     var body: some Scene {
-        Window("회의 전사", id: "main") {
+        Window("Meeting STT", id: "main") {
             ContentView()
                 .environmentObject(model)
                 .onAppear { appDelegate.model = model }

@@ -14,10 +14,10 @@ enum CaptureSource: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .systemAndMic: "시스템 출력 + 마이크"
-        case .device: "입력 장치"
-        case .system: "시스템 출력"
-        case .app: "앱 오디오"
+        case .systemAndMic: "System + Microphone"
+        case .device: "Input device"
+        case .system: "System audio"
+        case .app: "App audio"
         }
     }
 
@@ -50,17 +50,17 @@ enum ResultKind: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .transcript: "전사"
-        case .notes: "Markdown / 회의록"
-        case .prompt: "AI 요약 프롬프트"
+        case .transcript: "Transcript"
+        case .notes: "Markdown / Meeting notes"
+        case .prompt: "AI summary prompt"
         }
     }
 
     var emptyDescription: String {
         switch self {
-        case .transcript: "전사를 실행하면 화자별 결과가 여기에 표시됩니다."
-        case .notes: "전사 후 회의록을 생성하면 여기에 표시됩니다."
-        case .prompt: "전사 후 AI 요약 프롬프트를 생성하면 여기에 표시됩니다."
+        case .transcript: "Transcribe a recording to see the results grouped by speaker."
+        case .notes: "Generate meeting notes after transcription to see them here."
+        case .prompt: "Generate an AI summary prompt after transcription to see it here."
         }
     }
 }
@@ -188,21 +188,21 @@ final class AppModel: ObservableObject {
 
     var activityDescription: String {
         switch activity {
-        case .idle: "대기 중"
-        case .startingRecording: "녹음을 준비하는 중…"
-        case .recording: "녹음 중"
-        case .stoppingRecording: "WAV를 마무리하는 중…"
-        case .transcribing: "전사 중…"
-        case .generatingNotes(_, let promptOnly): promptOnly ? "프롬프트 생성 중…" : "회의록 생성 중…"
-        case .failed: "오류"
+        case .idle: "Ready"
+        case .startingRecording: "Preparing to record…"
+        case .recording: "Recording"
+        case .stoppingRecording: "Saving recording…"
+        case .transcribing: "Transcribing…"
+        case .generatingNotes(_, let promptOnly): promptOnly ? "Generating prompt…" : "Generating notes…"
+        case .failed: "Error"
         }
     }
 
     var workerDescription: String {
         switch activity {
-        case .transcribing: "Python ML worker가 전사하고 있습니다."
-        case .generatingNotes(_, let promptOnly): promptOnly ? "AI 요약 프롬프트를 만들고 있습니다." : "회의록을 만들고 있습니다."
-        default: "한 번에 하나의 ML 작업만 실행됩니다."
+        case .transcribing: "Transcribing your recording…"
+        case .generatingNotes(_, let promptOnly): promptOnly ? "Creating an AI summary prompt." : "Creating meeting notes."
+        default: "One transcription or notes task can run at a time."
         }
     }
 
@@ -231,7 +231,7 @@ final class AppModel: ObservableObject {
             await refreshApps()
         } catch {
             didStart = false
-            presentFailure("프로젝트 준비 실패", error)
+            presentFailure("Could not prepare project", error)
         }
     }
 
@@ -247,7 +247,7 @@ final class AppModel: ObservableObject {
                 }
             }
         } catch {
-            presentError("입력 장치 새로고침 실패", error)
+            presentError("Could not refresh input devices", error)
         }
     }
 
@@ -259,7 +259,7 @@ final class AppModel: ObservableObject {
                 selectedAppPID = apps.first?.pid
             }
         } catch {
-            presentError("앱 목록 새로고침 실패", error)
+            presentError("Could not refresh app list", error)
         }
     }
 
@@ -277,7 +277,7 @@ final class AppModel: ObservableObject {
             selectedSessionID = loaded.contains(where: { $0.id == previous }) ? previous : loaded.first?.id
             await loadSelectedSession()
         } catch {
-            presentError("녹음 목록 새로고침 실패", error)
+            presentError("Could not refresh recordings", error)
         }
     }
 
@@ -304,21 +304,21 @@ final class AppModel: ObservableObject {
                     let document = try sessionStore.loadTranscript(sessionID: id)
                     transcript = document.segments.map(Self.formatSegment).joined(separator: "\n")
                 } catch {
-                    failures.append("전사 결과 불러오기 실패: \(error.localizedDescription)")
+                    failures.append("Could not load transcript: \(error.localizedDescription)")
                 }
             }
             if let markdownURL {
                 do {
                     notes = try String(contentsOf: markdownURL, encoding: .utf8)
                 } catch {
-                    failures.append("Markdown 결과 불러오기 실패: \(error.localizedDescription)")
+                    failures.append("Could not load Markdown result: \(error.localizedDescription)")
                 }
             }
             if let promptURL {
                 do {
                     prompt = try String(contentsOf: promptURL, encoding: .utf8)
                 } catch {
-                    failures.append("AI 요약 프롬프트 불러오기 실패: \(error.localizedDescription)")
+                    failures.append("Could not load AI summary prompt: \(error.localizedDescription)")
                 }
             }
             return (SessionResults(transcript: transcript, notes: notes, prompt: prompt), failures)
@@ -332,11 +332,11 @@ final class AppModel: ObservableObject {
 
     func startRecording() async {
         guard activity == .idle else {
-            presentError("녹음 시작 실패", MeetingSTTCoreError.processAlreadyRunning)
+            presentError("Could not start recording", MeetingSTTCoreError.processAlreadyRunning)
             return
         }
         guard let sessionStore, let nativeRecorder else {
-            presentError("녹음 시작 실패", MeetingSTTCoreError.projectRootNotFound([]))
+            presentError("Could not start recording", MeetingSTTCoreError.projectRootNotFound([]))
             return
         }
 
@@ -345,14 +345,14 @@ final class AppModel: ObservableObject {
         switch captureSource {
         case .device, .systemAndMic:
             guard let selectedDeviceID else {
-                presentError("녹음 시작 실패", MeetingSTTCoreError.recording("입력 장치를 선택하세요."))
+                presentError("Could not start recording", MeetingSTTCoreError.recording("Select an input device."))
                 return
             }
             deviceID = selectedDeviceID
             pid = nil
         case .app:
             guard let selectedAppPID else {
-                presentError("녹음 시작 실패", MeetingSTTCoreError.recording("녹음할 앱을 선택하세요."))
+                presentError("Could not start recording", MeetingSTTCoreError.recording("Select an app to record."))
                 return
             }
             deviceID = nil
@@ -372,13 +372,13 @@ final class AppModel: ObservableObject {
             if captureSource == .systemAndMic { _ = try RecordingMixer.executable() }
             if captureSource == .device || captureSource == .systemAndMic {
                 guard await AVCaptureDevice.requestAccess(for: .audio) else {
-                    throw MeetingSTTCoreError.recording("시스템 설정 > 개인정보 보호 및 보안 > 마이크에서 STT실행을 허용하세요.")
+                    throw MeetingSTTCoreError.recording("Allow Meeting STT in System Settings > Privacy & Security > Microphone.")
                 }
             }
             let session = try sessionStore.create(source: captureSource.rawValue, device: deviceID, pid: pid)
             createdSession = session
             guard let audioURL = session.audioURL else {
-                throw MeetingSTTCoreError.recording("세션 오디오 경로를 만들지 못했습니다: \(session.id)")
+                throw MeetingSTTCoreError.recording("Could not create the session audio path: \(session.id)")
             }
             activeSessionID = session.id
             activeSource = captureSource
@@ -424,7 +424,7 @@ final class AppModel: ObservableObject {
 
             guard recordingGeneration == generation else { return }
             activity = .recording(sessionID: session.id, source: captureSource)
-            appendLog("녹음 시작: \(session.id) · \(captureSource.title)")
+            appendLog("Recording started: \(session.id) · \(captureSource.title)")
             startHeartbeat(generation: generation)
             sessions.removeAll { $0.id == session.id }
             sessions.insert(session, at: 0)
@@ -437,7 +437,7 @@ final class AppModel: ObservableObject {
             }
             clearRecordingRuntime()
             refreshSessions(preferredID: createdSession?.id)
-            presentFailure("녹음 시작 실패", error)
+            presentFailure("Could not start recording", error)
         }
     }
 
@@ -460,7 +460,7 @@ final class AppModel: ObservableObject {
             case .systemAndMic:
                 let microphone = try deviceRecorder.stop()
                 let system = try await nativeRecorder.stop()
-                if system.startedHostTime == nil { appendLog("시스템 출력 오디오가 수신되지 않아 해당 트랙을 무음으로 저장합니다.") }
+                if system.startedHostTime == nil { appendLog("No system audio was received; saving that track as silence.") }
                 stats = try await RecordingMixer.mix(
                     directory: audioURL.deletingLastPathComponent(),
                     microphoneStart: microphone.startedHostTime,
@@ -484,7 +484,7 @@ final class AppModel: ObservableObject {
             elapsed = stats.duration
             recordedBytes = stats.bytes
             rmsLevel = 0
-            appendLog("녹음 완료: \(sessionID) · \(ByteCountFormatter.string(fromByteCount: stats.bytes, countStyle: .file))")
+            appendLog("Recording saved: \(sessionID) · \(ByteCountFormatter.string(fromByteCount: stats.bytes, countStyle: .file))")
             clearRecordingRuntime(keepMetrics: true)
             activity = .idle
             refreshSessions(preferredID: sessionID)
@@ -494,17 +494,17 @@ final class AppModel: ObservableObject {
             markRecordingError(sessionID: sessionID, error: error)
             clearRecordingRuntime(keepMetrics: true)
             refreshSessions(preferredID: sessionID)
-            presentFailure("녹음 정지 실패", error)
+            presentFailure("Could not stop recording", error)
         }
     }
 
     func transcribe(sessionID: String) async {
         guard activity == .idle, let processRunner, let sessionStore, let environment else {
-            presentError("전사 시작 실패", MeetingSTTCoreError.processAlreadyRunning)
+            presentError("Could not start transcription", MeetingSTTCoreError.processAlreadyRunning)
             return
         }
         guard let session = sessions.first(where: { $0.id == sessionID }), let audioURL = session.audioURL else {
-            presentError("전사 시작 실패", MeetingSTTCoreError.recording("전사할 녹음 파일이 없습니다."))
+            presentError("Could not start transcription", MeetingSTTCoreError.recording("No recording is available to transcribe."))
             return
         }
         await completionNotifier.requestAuthorizationIfNeeded()
@@ -515,7 +515,7 @@ final class AppModel: ObservableObject {
         activity = .transcribing(sessionID: sessionID)
         errorMessage = nil
         resultKind = .transcript
-        appendLog("전사 시작: \(sessionID)")
+        appendLog("Start transcription: \(sessionID)")
 
         let jsonURL = environment.outputsURL.appendingPathComponent("\(sessionID).json")
         let markdownURL = environment.outputsURL.appendingPathComponent("\(sessionID).md")
@@ -532,7 +532,7 @@ final class AppModel: ObservableObject {
                 arguments: arguments,
                 expectedFiles: [jsonURL, markdownURL],
                 onStdout: logCallback(prefix: "python"),
-                onStderr: logCallback(prefix: "python 오류")
+                onStderr: logCallback(prefix: "python Error")
             )
             guard workerGeneration == generation else { return }
             _ = try sessionStore.loadTranscript(sessionID: sessionID)
@@ -549,7 +549,7 @@ final class AppModel: ObservableObject {
             let preferredID = selectedSessionID
             workerGeneration = nil
             activity = .idle
-            appendLog("전사 완료: \(jsonURL.path)")
+            appendLog("Transcription complete: \(jsonURL.path)")
             if preferredID == sessionID { resultKind = .transcript }
             refreshSessions(preferredID: preferredID)
             await completionNotifier.notifyTranscriptionCompleted(
@@ -559,7 +559,7 @@ final class AppModel: ObservableObject {
         } catch {
             guard workerGeneration == generation else { return }
             workerGeneration = nil
-            presentFailure("전사 실패", error)
+            presentFailure("Transcription failed", error)
         }
     }
 
@@ -567,7 +567,7 @@ final class AppModel: ObservableObject {
         guard activity == .idle, let processRunner, let environment, let session = selectedSession,
               let transcriptURL = session.transcriptJSONURL
         else {
-            presentError("회의록 생성 실패", MeetingSTTCoreError.recording("전사 결과를 먼저 선택하세요."))
+            presentError("Could not generate notes", MeetingSTTCoreError.recording("Select a transcript first."))
             return
         }
 
@@ -583,39 +583,39 @@ final class AppModel: ObservableObject {
         if !trimmedProject.isEmpty { arguments += ["--project", trimmedProject] }
         if promptOnly { arguments.append("--prompt-only") }
         if ai { arguments.append("--ai") }
-        appendLog(promptOnly ? "AI 요약 프롬프트 생성 시작: \(session.id)"
-                  : ai ? "AI 회의록 생성 시작(claude CLI): \(session.id)"
-                  : "회의록 생성 시작: \(session.id)")
+        appendLog(promptOnly ? "Generating AI summary prompt: \(session.id)"
+                  : ai ? "Generating AI notes(claude CLI): \(session.id)"
+                  : "Generating meeting notes: \(session.id)")
 
         do {
             _ = try await processRunner.runPython(
                 arguments: arguments,
                 expectedFiles: [outputURL],
                 onStdout: logCallback(prefix: "python"),
-                onStderr: logCallback(prefix: "python 오류")
+                onStderr: logCallback(prefix: "python Error")
             )
             guard workerGeneration == generation else { return }
             _ = try String(contentsOf: outputURL, encoding: .utf8)
             let preferredID = selectedSessionID
             workerGeneration = nil
             activity = .idle
-            appendLog("생성 완료: \(outputURL.path)")
+            appendLog("Created: \(outputURL.path)")
             if preferredID == session.id { resultKind = promptOnly ? .prompt : .notes }
             refreshSessions(preferredID: preferredID)
         } catch {
             guard workerGeneration == generation else { return }
             workerGeneration = nil
-            presentFailure(promptOnly ? "AI 요약 프롬프트 생성 실패" : "회의록 생성 실패", error)
+            presentFailure(promptOnly ? "Could not generate AI summary prompt" : "Could not generate notes", error)
         }
     }
 
     func cancelWorker() async {
         guard isWorkerRunning, let processRunner else { return }
         workerGeneration = nil
-        appendLog("작업 취소 요청")
+        appendLog("Cancellation requested")
         await processRunner.cancel()
         activity = .idle
-        appendLog("작업을 취소했습니다. 진행 중인 partial 전사는 보존됩니다.")
+        appendLog("Task cancelled. Partial transcripts have been preserved.")
     }
 
     func renameSession(id: String, name: String) {
@@ -626,17 +626,17 @@ final class AppModel: ObservableObject {
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             sessions[index].name = trimmed.isEmpty ? nil : trimmed
         } catch {
-            presentError("이름 변경 실패", error)
+            presentError("Could not rename session", error)
         }
     }
 
     func deleteSession(id: String) {
         guard activity == .idle else {
-            presentError("세션 삭제 실패", MeetingSTTCoreError.processAlreadyRunning)
+            presentError("Could not delete session", MeetingSTTCoreError.processAlreadyRunning)
             return
         }
         guard let sessionStore else {
-            presentError("세션 삭제 실패", MeetingSTTCoreError.recording("프로젝트가 준비되지 않았습니다."))
+            presentError("Could not delete session", MeetingSTTCoreError.recording("The project is not ready."))
             return
         }
         do {
@@ -647,10 +647,10 @@ final class AppModel: ObservableObject {
             }
             refreshSessions()
             if !result.errors.isEmpty {
-                errorMessage = "세션은 삭제했지만 일부 결과 파일을 삭제하지 못했습니다:\n\(result.errors.joined(separator: "\n"))"
+                errorMessage = "The session was deleted, but some result files could not be removed:\n\(result.errors.joined(separator: "\n"))"
             }
         } catch {
-            presentError("세션 삭제 실패", error)
+            presentError("Could not delete session", error)
         }
     }
 
@@ -670,13 +670,13 @@ final class AppModel: ObservableObject {
                 playbackTask?.cancel()
             } else {
                 guard audioPlayer.play() else {
-                    throw MeetingSTTCoreError.recording("선택한 WAV 재생을 시작하지 못했습니다: \(audioURL.path)")
+                    throw MeetingSTTCoreError.recording("Could not start playback: \(audioURL.path)")
                 }
                 isPlaying = true
                 startPlaybackHeartbeat()
             }
         } catch {
-            presentError("녹음 재생 실패", error)
+            presentError("Could not play recording", error)
         }
     }
 
@@ -690,10 +690,10 @@ final class AppModel: ObservableObject {
         guard !currentResultText.isEmpty else { return }
         NSPasteboard.general.clearContents()
         guard NSPasteboard.general.setString(currentResultText, forType: .string) else {
-            presentError("결과 복사 실패", MeetingSTTCoreError.recording("클립보드에 텍스트를 쓸 수 없습니다."))
+            presentError("Could not copy result", MeetingSTTCoreError.recording("Could not write text to the clipboard."))
             return
         }
-        appendLog("현재 결과를 클립보드에 복사했습니다.")
+        appendLog("Copied the current result to the clipboard.")
     }
 
     func dismissError() {
@@ -709,10 +709,10 @@ final class AppModel: ObservableObject {
 
     func sessionStatus(_ session: RecordingSession) -> String {
         switch session.status {
-        case "recording": "녹음 중"
-        case "recorded": "녹음 완료"
-        case "transcribed": "전사 완료"
-        case "error": "오류"
+        case "recording": "Recording"
+        case "recorded": "Recording saved"
+        case "transcribed": "Transcription complete"
+        case "error": "Error"
         default: session.status
         }
     }
@@ -740,7 +740,7 @@ final class AppModel: ObservableObject {
             if let activeSessionID {
                 markRecordingError(
                     sessionID: activeSessionID,
-                    error: MeetingSTTCoreError.recording("앱 종료 중 녹음을 정상 finalize하지 못했습니다.")
+                    error: MeetingSTTCoreError.recording("Could not finalize the recording while quitting.")
                 )
             }
             clearRecordingRuntime()
@@ -817,7 +817,7 @@ final class AppModel: ObservableObject {
             if processResult.exitCode == 0 {
                 error = MeetingSTTCoreError.recording(
                     processResult.stderr.isEmpty
-                        ? "apptap 녹음 프로세스가 예기치 않게 종료되었습니다."
+                        ? "The audio capture process exited unexpectedly."
                         : processResult.stderr
                 )
             } else {
@@ -833,7 +833,7 @@ final class AppModel: ObservableObject {
         markRecordingError(sessionID: sessionID, error: error)
         clearRecordingRuntime()
         refreshSessions(preferredID: sessionID)
-        presentFailure("녹음 중단", error)
+        presentFailure("Recording interrupted", error)
     }
 
     private func logCallback(prefix: String) -> @Sendable (String) -> Void {
@@ -851,7 +851,7 @@ final class AppModel: ObservableObject {
 
     private func markRecordingError(sessionID: String, error: Error) {
         guard let sessionStore else {
-            appendLog("metadata 오류 기록 실패: 프로젝트가 준비되지 않았습니다.")
+            appendLog("Could not save error metadata: The project is not ready.")
             return
         }
         do {
@@ -865,7 +865,7 @@ final class AppModel: ObservableObject {
                 ]
             )
         } catch {
-            appendLog("metadata 오류 기록 실패: \(error.localizedDescription)")
+            appendLog("Could not save error metadata: \(error.localizedDescription)")
         }
     }
 

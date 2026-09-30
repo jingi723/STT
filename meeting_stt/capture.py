@@ -24,7 +24,7 @@ _LEVEL_STALE_SEC = 0.5
 
 # 네이티브 헬퍼 미존재 시 안내 메시지(빌드 방법)
 _APPTAP_MISSING = (
-    "앱/시스템 캡처 헬퍼(native/apptap)가 없습니다. 빌드: "
+    "App/system capture helper (native/apptap) is missing. Build it with: "
     "swiftc -O native/apptap.swift -o native/apptap "
     "-framework CoreAudio -framework AudioToolbox -framework AVFoundation -framework AppKit"
 )
@@ -87,7 +87,7 @@ class Recorder:
 
     def start(self) -> None:
         if self._stream is not None:
-            raise RuntimeError("이미 녹음 중입니다.")
+            raise RuntimeError("A recording is already in progress.")
         import numpy as np
         import sounddevice as sd
 
@@ -115,13 +115,13 @@ class Recorder:
         except Exception as e:  # PortAudioError 등
             self._stream = None
             raise RuntimeError(
-                f"녹음을 시작할 수 없습니다(device={self.device}, {self.samplerate}Hz, "
+                f"Could not start recording (device={self.device}, {self.samplerate}Hz, "
                 f"{self.channels}ch): {e}"
             ) from e
 
     def stop(self, out_path: str) -> str:
         if self._stream is None:
-            raise RuntimeError("녹음이 시작되지 않았습니다.")
+            raise RuntimeError("Recording has not started.")
         import numpy as np
 
         self._stream.stop()
@@ -204,7 +204,7 @@ class _NativeRecorder:
         if self._proc.poll() is not None:
             err = self._proc.stderr.read().decode("utf-8", "ignore") if self._proc.stderr else ""
             self._proc = None
-            raise RuntimeError(f"녹음 시작 실패: {err.strip() or 'apptap 즉시 종료'}")
+            raise RuntimeError(f"Could not start recording: {err.strip() or 'apptap exited immediately'}")
         # 즉사 체크 통과 후에야 stdout 리더 시작(즉사 체크는 stderr만 사용)
         self._start_reader()
 
@@ -232,7 +232,7 @@ class _NativeRecorder:
 
     def stop(self) -> str:
         if self._proc is None:
-            raise RuntimeError("녹음이 시작되지 않았습니다.")
+            raise RuntimeError("Recording has not started.")
         self._proc.terminate()  # SIGTERM → apptap이 wav를 finalize
         try:
             self._proc.wait(timeout=5)

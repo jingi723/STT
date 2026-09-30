@@ -1,317 +1,163 @@
 # Meeting STT
 
-macOS에서 회의 오디오를 녹음하고, 로컬 모델로 화자별 전사와 회의록 초안을 만드는 도구입니다.
+Record meetings on your Mac, transcribe them locally, and turn the transcript into meeting notes.
 
-- 네이티브 SwiftUI 앱에서 시스템 출력과 마이크를 함께 녹음합니다. 입력 장치·시스템 출력·특정 앱의 단독 녹음도 지원합니다.
-- Qwen3-ASR-1.7B로 음성을 전사하고 pyannote로 화자를 분리합니다.
-- 녹음, 전사 JSON, Markdown 회의록을 로컬 디스크에 보관합니다.
-- 기존 Python CLI와 로컬 웹 대시보드도 계속 사용할 수 있습니다.
+Meeting STT combines **system audio and your microphone** without asking you to identify app processes or PIDs. A native SwiftUI app handles recording, playback, and saved sessions; Qwen3-ASR-1.7B and pyannote handle transcription and speaker diarization.
 
-> 지원 대상: macOS 14.2 이상. 모델 다운로드에는 Hugging Face 연결이 필요하지만, 다운로드가 끝난 뒤 녹음과 추론은 로컬에서 실행됩니다.
+**macOS 14.2+ · Apple Silicon recommended · English interface**
 
-## 주요 기능
+This is the English public branch. The maintainer's Korean version is preserved on [`personal/ko`](https://github.com/jingi723/STT/tree/personal/ko). Interface language does not change the language spoken in your recordings or translate your transcripts.
 
-- Core Audio 입력 장치 녹음
-- macOS Core Audio Process Tap 기반 시스템 전체 출력 녹음
-- 프로세스를 선택하는 특정 앱 오디오 녹음
-- 녹음 중 파일 크기, 경과 시간, 실시간 레벨 표시
-- 저장된 세션 재생, 이름 변경, 삭제 및 앱 재실행 후 복구
-- Qwen3-ASR context biasing
-- pyannote 화자분리와 화자 수 지정
-- 중간 결과 저장과 중단된 전사 이어하기
-- 로컬 회의록 템플릿 또는 AI 에이전트용 요약 프롬프트 생성
+## What you can do
 
-## 구성
+- Record system audio and a microphone together, or record either source separately.
+- Record a specific app when you need to exclude other playback.
+- Watch elapsed time, file size, and audio levels while recording.
+- Replay, rename, and transcribe saved sessions after restarting the app.
+- Identify speakers with pyannote and improve recognition with context keywords.
+- Search transcripts, copy results, and receive a notification when transcription finishes.
+- Generate local Markdown notes, prepare an AI summary prompt, or optionally create notes with Claude CLI.
 
-```text
-SwiftUI macOS 앱
-├── 녹음·재생·세션 관리
-├── 입력 장치 / 시스템 출력 / 앱 오디오 선택
-└── Python worker와 native/apptap 실행
-          │
-          ├── native/apptap
-          │   └── Core Audio Process Tap → WAV
-          │
-          └── meeting_stt Python 패키지
-              ├── Qwen3-ASR-1.7B
-              ├── pyannote diarization
-              └── transcript / notes / prompt
-```
+## Quick start
 
-Swift 앱과 Python 사이에 별도 서버나 RPC 계층은 없습니다. 프로세스 종료 코드와 아래 파일 구조가 인터페이스입니다.
+This repository currently ships **source**, not a standalone installer. The app uses a Python environment, models, and the audio helper inside the checkout. Keep the app beside those files.
 
-## 요구 사항
+### Requirements
 
-- macOS 14.2 이상
-- Apple Silicon Mac 권장
-- Homebrew
-- Python 3.12
-- ffmpeg
+- macOS 14.2 or later; Apple Silicon recommended
+- [Homebrew](https://brew.sh)
+- Python 3.12 and ffmpeg
 - Xcode Command Line Tools (`swift`, `swiftc`)
-- 모델 저장 공간 수 GB
-- Hugging Face Read 토큰
-
-Xcode Command Line Tools가 없다면 먼저 설치합니다.
+- Several GB of disk space for models and dependencies
+- A [Hugging Face read token](https://huggingface.co/settings/tokens) for model setup
 
 ```bash
-xcode-select --install
-```
+xcode-select --install  # if Command Line Tools are not installed
+brew install python@3.12 ffmpeg
 
-Hugging Face 토큰은 <https://huggingface.co/settings/tokens>에서 Read 권한으로 발급할 수 있습니다.
-
-## 빠른 시작
-
-```bash
 git clone https://github.com/jingi723/STT.git
 cd STT
-
 cp .env.example .env
-# .env의 HF_TOKEN 값을 본인 토큰으로 변경
+# Edit .env and set HF_TOKEN to your own token.
 
 bash build.sh all
-open "STT실행.app"
+open "Meeting STT.app"
 ```
 
-`build.sh all`은 다음 작업을 순서대로 수행합니다.
+The build script checks prerequisites, creates `STT_env`, installs Python dependencies, builds the Core Audio helper and SwiftUI app, signs them locally, and downloads the models. The app is ad-hoc signed, not Developer ID signed or notarized.
 
-1. Python 3.12, ffmpeg, Swift 도구 및 HF 토큰 확인
-2. `STT_env` 가상환경과 Python 의존성 설치
-3. `native/apptap` 빌드 및 서명
-4. SwiftUI 앱 release 빌드 및 ad-hoc 서명
-5. Qwen3-ASR와 pyannote 모델 다운로드
+### Permissions
 
-앱이 Gatekeeper에 막히면 Finder에서 `STT실행.app`을 우클릭한 뒤 **열기**를 선택합니다.
+Allow **Microphone** access for microphone recording and **Screen & System Audio Recording** access for system/app audio. Manage permissions in **System Settings → Privacy & Security** for Meeting STT or the terminal running it. Quit and reopen the app after changing permissions.
 
-## macOS 권한
+### Record your first meeting
 
-처음 사용하는 녹음 소스에 따라 macOS가 권한을 요청합니다.
+1. Open `Meeting STT.app`.
+2. Keep **System + Microphone** selected and choose your microphone.
+3. Click **Start recording**.
+4. Click **Stop recording** to save and combine both tracks.
+5. Select the saved session and click **Start transcription**.
+6. Generate meeting notes or copy the transcript when it is ready.
 
-| 기능 | 필요한 권한 |
-|---|---|
-| Mac·USB·연속성 마이크 | 마이크 |
-| 시스템 전체 출력 | 시스템 오디오 녹음 |
-| 특정 앱 출력 | 시스템 오디오 녹음 |
-
-권한을 거부했거나 무음이 저장되면 다음 위치에서 `STT실행`, 터미널 또는 실행한 바이너리의 권한을 확인합니다.
-
-```text
-시스템 설정
-└── 개인정보 보호 및 보안
-    ├── 마이크
-    └── 화면 및 시스템 오디오 녹음
-```
-
-권한 변경 후에는 실행 중인 앱을 완전히 종료하고 다시 실행합니다. 권한을 우회하는 코드는 포함하지 않습니다.
-
-## 앱 사용법
-
-1. `STT실행.app`을 엽니다.
-2. 기본 소스 **시스템 출력 + 마이크**를 사용하거나 다른 녹음 소스를 선택합니다.
-3. 입력 장치 또는 대상 앱을 선택합니다.
-4. **녹음 시작**을 누릅니다.
-5. 경과 시간, 파일 크기, 입력·출력 레벨을 확인합니다.
-6. **녹음 정지**를 눌러 WAV를 finalize합니다.
-7. 저장된 세션에서 전사 옵션을 선택하고 **전사 시작**을 누릅니다.
-8. 전사가 끝나면 회의록 또는 AI 요약 프롬프트를 생성합니다.
-
-### 녹음 소스
-
-| 소스 | 녹음 대상 | 비고 |
+| Source | Captures | Notes |
 |---|---|---|
-| 시스템 출력 + 마이크 (기본) | Mac 전체 출력 + 선택한 입력 장치 | PID 선택 불필요. 정지 시 두 트랙을 동기화해 하나의 WAV로 저장 |
-| 입력 장치 | Mac 마이크, AirPods, USB 마이크, 연속성 마이크 | macOS 기본 입력 장치를 최초 선택하며 사용자가 선택한 유효 장치는 유지 |
-| 시스템 출력 | 이 Mac에서 재생되는 전체 소리 | 마이크 음성은 포함하지 않음 |
-| 앱 오디오 | 선택한 프로세스의 출력 | 미팅 앱이나 브라우저 등 특정 앱만 녹음 |
+| System + Microphone (default) | All Mac playback plus the selected microphone | No app/PID selection; creates one combined WAV |
+| Input device | Selected microphone or audio input | Initially selects the macOS default input |
+| System audio | All Mac playback | Does not include microphone input |
+| App audio | One selected app process | Useful when other app audio should be excluded |
 
-동시 녹음은 `microphone.wav`와 `system.wav` 원본을 보존하고, 재생·전사용 `audio.wav`를 생성합니다. 합성에는 ffmpeg가 필요합니다. 전체 출력에는 다른 앱의 알림과 음악도 포함됩니다. 스피커 소리가 마이크에 다시 들어가는 것을 줄이려면 이어폰을 사용하세요.
+System capture includes notification sounds and music from other apps. Headphones help avoid speaker audio being recorded again through your microphone. The app does not perform acoustic echo cancellation.
 
-시스템 출력 또는 앱 오디오 모드의 **출력 레벨**은 Mac에서 실제 소리가 재생될 때만 움직입니다.
+Both original tracks are retained. Their first audio-frame timestamps align the combined recording, and ffmpeg converts them to a 48 kHz mono WAV. If there is no system playback, the system track is treated as silence.
 
-## 저장 구조
+## Local data and optional AI
 
-모든 사용자 데이터는 Git에서 제외되는 `outputs/` 아래에 저장됩니다.
+Recordings, models, transcripts, and notes stay in local directories excluded from Git. Recording and speech inference run locally after model setup. No cloud speech service is required.
+
+**AI notes is optional:** it invokes your signed-in Claude CLI and sends the transcript and prompt to that service. Local notes and prompt generation do not call an AI service. Review prompts before sharing them with an external tool.
 
 ```text
 outputs/
-├── recordings/
-│   └── {session-id}/
-│       ├── audio.wav
-│       └── metadata.json
-├── {session-id}.json
-├── {session-id}.md
+├── recordings/{session-id}/
+│   ├── audio.wav         # combined recording used for playback/transcription
+│   ├── microphone.wav    # original microphone track in combined mode
+│   ├── system.wav        # original system track in combined mode
+│   └── metadata.json
+├── {session-id}.json      # transcript with speakers and timestamps
+├── {session-id}.md        # transcript and meeting notes
 ├── {session-id}.partial.json
 └── {session-id}.prompt.md
 ```
 
-- `audio.wav`: 원본 녹음
-- `metadata.json`: 소스, 장치, 시간, 상태 및 결과 경로
-- `.json`: 화자와 타임스탬프가 포함된 전사 데이터
-- `.md`: 사람이 읽는 전사 또는 회의록
-- `.partial.json`: 중단된 전사를 이어가기 위한 중간 결과
-- `.prompt.md`: 외부 AI 에이전트에 전달할 요약 프롬프트
+Do not commit `.env`, recordings, transcripts, downloaded models, or personal wiki content. A repository checkout is needed at runtime; moving just the app to `/Applications` does not install its Python environment or models.
 
-## CLI
-
-Swift 앱 없이 Python CLI만 사용할 수도 있습니다. 가상환경을 활성화하지 않았다면 저장소의 Python 실행 파일을 직접 사용합니다.
+## Command line
 
 ```bash
-# 명령 목록
 STT_env/bin/python -m meeting_stt --help
-
-# 입력 장치와 캡처 가능한 앱
 STT_env/bin/python -m meeting_stt devices
 STT_env/bin/python -m meeting_stt apps
 
-# 오디오 → 화자별 전사
+# Transcribe audio with speaker diarization.
 STT_env/bin/python -m meeting_stt transcribe meeting.wav \
-  --context "프로젝트명, 제품명, 참석자명" \
-  --num-speakers 3
+  --context "Project Atlas, Qwen3-ASR, Alex" --num-speakers 3
 
-# 전사 JSON → 회의록
-STT_env/bin/python -m meeting_stt notes outputs/meeting.json \
-  --project MyProject
+# Generate local notes or an AI summary prompt.
+STT_env/bin/python -m meeting_stt notes outputs/meeting.json --project Atlas
+STT_env/bin/python -m meeting_stt notes outputs/meeting.json --prompt-only
 
-# AI 에이전트용 프롬프트
-STT_env/bin/python -m meeting_stt notes outputs/meeting.json \
-  --project MyProject \
-  --prompt-only
+# Optional: generate AI notes using your signed-in Claude CLI account.
+STT_env/bin/python -m meeting_stt notes outputs/meeting.json --ai
 
-# 전사와 회의록을 한 번에
-STT_env/bin/python -m meeting_stt run meeting.wav \
-  --context "프로젝트명, 제품명" \
-  --num-speakers 3
+# Run transcription and notes generation together.
+STT_env/bin/python -m meeting_stt run meeting.wav --num-speakers 3
 
-# LLM-Wiki 구조 생성
-STT_env/bin/python -m meeting_stt init-wiki ./LLM-Wiki \
-  --project MyProject
+# Create a reference wiki, preserving existing files.
+STT_env/bin/python -m meeting_stt init-wiki ./LLM-Wiki --project Atlas
 
-# 녹음 파일 정리: 기본은 미리보기
+# Preview recording cleanup; add --yes to delete WAV files, keeping text.
 STT_env/bin/python -m meeting_stt clean-audio
-STT_env/bin/python -m meeting_stt clean-audio --yes
 ```
 
-## 로컬 웹 대시보드
+The optional legacy web dashboard runs with `STT_env/bin/python -m meeting_stt dashboard` at <http://127.0.0.1:8000>. It supports input, system, and app capture individually. Combined system + microphone recording is available in the native app.
 
-기존 FastAPI 대시보드도 유지됩니다.
+## Build and test
 
 ```bash
-STT_env/bin/python -m meeting_stt dashboard
+bash build.sh prereqs     # check setup
+bash build.sh deps        # install Python dependencies
+bash build.sh apptap      # build/sign the Core Audio helper
+bash build.sh app         # build/sign Meeting STT.app
+bash build.sh models      # download/cache models
+
+bash scripts/test-recording.sh
+python3 tests/test_ai_notes.py
+python3 tests/test_english.py
+python3 -m compileall -q meeting_stt scripts
 ```
 
-브라우저에서 <http://127.0.0.1:8000>을 엽니다. 신규 사용에는 SwiftUI 앱을 권장합니다.
+The recording tests exercise different sample rates, start-time alignment in both directions, overlapping audio, trailing audio, silence, and failure handling. They use a standalone Swift test runner so full Xcode is not required. Add `--live` to play a quiet test tone and save a five-second system/microphone test session. Hardware tests need the corresponding macOS permissions; a silent microphone track is not proof of voice capture.
 
-## 빌드 명령
+## Troubleshooting
 
-```bash
-bash build.sh              # all과 동일
-bash build.sh prereqs      # 사전 요구 사항 확인
-bash build.sh deps         # Python 가상환경과 의존성
-bash build.sh apptap       # Core Audio Process Tap helper
-bash build.sh app          # SwiftUI 앱
-bash build.sh icon         # 레거시 command 런처 아이콘
-bash build.sh models       # Qwen3-ASR와 pyannote 모델
-```
+- **No microphone signal:** check the selected device, its mute state, and macOS microphone permission. Refresh input devices.
+- **No system signal:** play some audio and check system audio recording permission. Rebuild the helper with `bash build.sh apptap` if needed.
+- **Project root not found:** keep the app at the repository root, or launch it with `MEETING_STT_ROOT="$PWD" "./Meeting STT.app/Contents/MacOS/MeetingSTTApp"`.
+- **Python or models missing:** run `bash build.sh deps` and `bash build.sh models`.
+- **AI notes unavailable:** install and sign in to Claude CLI, or use local notes. AI errors fall back to the local template.
 
-## 프로젝트 구조
+## Project structure
 
-```text
-macos/
-└── Sources/MeetingSTTApp/
-    ├── MeetingSTTApp.swift
-    ├── ContentView.swift
-    ├── AppModel.swift
-    ├── SessionStore.swift
-    ├── ProcessRunner.swift
-    └── DeviceRecorder.swift
-
-meeting_stt/
-├── audio.py
-├── asr.py
-├── diarize.py
-├── pipeline.py
-├── notes.py
-├── wiki.py
-├── capture.py
-├── server.py
-└── cli.py
-
-native/
-└── apptap.swift
-```
-
-| 영역 | 책임 |
+| Path | Purpose |
 |---|---|
-| SwiftUI 앱 | UI, Core Audio 입력 녹음, 세션, 재생, worker 수명주기 |
-| `native/apptap` | 특정 앱 및 시스템 출력의 Process Tap 녹음 |
-| Python 패키지 | ASR, 화자분리, 전사 저장, 회의록과 프롬프트 |
-| 디스크 | 세션과 결과의 단일 진실 공급원 |
+| `macos/Sources/MeetingSTTApp/` | Native recording, playback, sessions, and worker lifecycle |
+| `native/apptap.swift` | Core Audio Process Tap helper |
+| `meeting_stt/` | Python transcription, diarization, notes, CLI, and web dashboard |
+| `scripts/` and `tests/` | Setup and regression tests |
+| `outputs/` | Local user data; excluded from Git |
 
-## 개인정보와 공개 저장소 안전
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and branch conventions. Historical notebooks and internal agent guides may contain Korean; the public app, CLI, dashboard, and generated note templates use English.
 
-- `.env`, 모델, 가상환경, 녹음, 전사, 회의록 및 LLM-Wiki는 `.gitignore`에 포함됩니다.
-- HF 토큰은 `.env` 또는 `HF_TOKEN` 환경변수에서만 읽습니다.
-- 앱은 녹음이나 전사 결과를 별도 서버로 업로드하지 않습니다.
-- 공개 저장소에 커밋하기 전 `git status`로 `outputs/`, `.env`, `models/`가 포함되지 않았는지 확인하세요.
-- 회의 녹음 전에 참석자의 동의를 받고 지역 법률과 회사 정책을 확인하세요.
+## License
 
-## 문제 해결
-
-### 입력 장치가 보이지 않음
-
-macOS의 기본 입력과 권한을 확인한 뒤 앱의 새로고침 버튼을 누릅니다.
-
-```bash
-STT_env/bin/python -m meeting_stt devices
-```
-
-### 시스템·앱 출력이 무음
-
-시스템 오디오 녹음 권한을 허용하고 앱을 완전히 재시작합니다. 캡처 helper가 정상인지 확인할 수 있습니다.
-
-```bash
-bash build.sh apptap
-native/apptap list
-```
-
-### 출력 레벨이 0%
-
-시스템 출력 모드에서는 Mac에서 음악, 영상 또는 통화 상대방 음성이 실제로 재생되어야 합니다. 마이크에 말하는 소리는 시스템 출력 레벨에 포함되지 않습니다.
-
-### 프로젝트 루트를 찾지 못함
-
-`STT실행.app`을 저장소 루트에 두거나 환경변수로 루트를 지정합니다.
-
-```bash
-MEETING_STT_ROOT="$PWD" "./STT실행.app/Contents/MacOS/MeetingSTTApp"
-```
-
-### 모델 또는 Python 경로 오류
-
-```bash
-bash build.sh deps
-bash build.sh models
-```
-
-## 개발 검증
-
-```bash
-# Swift 앱
-swift build --package-path macos -c release
-
-# native helper
-bash build.sh apptap
-native/apptap list
-
-# Python 문법·import·CLI
-STT_env/bin/python -m py_compile meeting_stt/*.py
-STT_env/bin/python -c "import meeting_stt; print('import OK')"
-STT_env/bin/python -m meeting_stt --help
-```
-
-## 라이선스
-
-이 저장소에는 아직 별도의 오픈소스 라이선스가 지정되지 않았습니다. 공개 열람은 가능하지만 복제, 수정 및 재배포 권한은 자동으로 부여되지 않습니다. Qwen3-ASR, pyannote 및 기타 의존성에는 각각의 라이선스가 적용됩니다.
-
-### 녹음 합성 회귀 테스트
-
-`bash scripts/test-recording.sh`는 실제 합성 코드를 사용해 샘플레이트 변환, 시작 순서별 동기화, 두 소스의 음량, 끝부분 보존과 실패 시 원본 보존을 검사합니다. Xcode 없이 Command Line Tools와 ffmpeg로 실행할 수 있습니다. `--live`를 추가하면 작은 테스트음을 재생하며 기본 마이크와 시스템 출력을 5초간 녹음하고 테스트 세션을 저장합니다.
+No open-source license has been selected for this repository yet. The repository is publicly viewable, but no additional reuse or redistribution license is granted here. Models and dependencies have their own licenses.

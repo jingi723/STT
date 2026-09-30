@@ -25,7 +25,7 @@ def load_audio(path: str, sr: int | None = None):
     import librosa
 
     if not Path(path).exists():
-        raise FileNotFoundError(f"오디오 파일을 찾을 수 없습니다: {path}")
+        raise FileNotFoundError(f"Audio file not found: {path}")
     audio, sample_rate = librosa.load(path, sr=sr, mono=True)
     return audio, sample_rate
 

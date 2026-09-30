@@ -21,24 +21,24 @@ from meeting_stt.config import DIARIZE_SOURCE, load_hf_token
 
 token = load_hf_token(ROOT)
 login(token=token, add_to_git_credential=False)
-print("HuggingFace 로그인 완료\n")
+print("Signed in to Hugging Face\n")
 
 # 1) Qwen3-ASR (로컬 디렉토리)
 qwen_dir = Path("models/Qwen3-ASR")
 if (qwen_dir / "config.json").exists():
-    print("✅ Qwen/Qwen3-ASR-1.7B → 이미 있음")
+    print("✅ Qwen/Qwen3-ASR-1.7B → already downloaded")
 else:
-    print("⬇️  Qwen/Qwen3-ASR-1.7B 다운로드 중...")
+    print("⬇️  Qwen/Qwen3-ASR-1.7B downloading...")
     snapshot_download(repo_id="Qwen/Qwen3-ASR-1.7B", local_dir=str(qwen_dir))
-    print("✅ Qwen3-ASR 완료")
+    print("✅ Qwen3-ASR ready")
 
 # 2) 화자분리 파이프라인 워밍 — Pipeline.from_pretrained가 참조 모델까지 캐시에 받음
-print(f"\n⬇️  화자분리 파이프라인 로드/다운로드: {DIARIZE_SOURCE}")
+print(f"\n⬇️  Loading/downloading speaker diarization pipeline: {DIARIZE_SOURCE}")
 from pyannote.audio import Pipeline
 
 pipe = Pipeline.from_pretrained(DIARIZE_SOURCE, token=token)
 if pipe is None:
-    raise SystemExit("❌ 화자분리 파이프라인 로드 실패(네트워크/접근 확인)")
-print("✅ 화자분리 파이프라인 준비 완료 (segmentation + embedding 캐시됨)")
+    raise SystemExit("❌ Could not load diarization pipeline (check connection and permissions)")
+print("✅ Diarization pipeline ready (segmentation and embedding cached)")
 
-print("\n모든 모델 준비 완료")
+print("\nAll models ready")

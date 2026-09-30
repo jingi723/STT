@@ -42,8 +42,8 @@ checkpoints/
 # Native build and signing artifacts
 native/apptap
 native/_CodeSignature/
-STT실행.app/Contents/MacOS/MeetingSTTApp
-STT실행.app/Contents/_CodeSignature/
+Meeting STT.app/Contents/MacOS/MeetingSTTApp
+Meeting STT.app/Contents/_CodeSignature/
 *.swiftmodule
 macos/.build/
 .swiftpm/

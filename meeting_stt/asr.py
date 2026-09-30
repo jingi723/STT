@@ -21,7 +21,7 @@ class Qwen3Engine:
         p = Path(model_path)
         if not p.exists():
             raise FileNotFoundError(
-                f"{model_path} 가 없습니다. `scripts/download_models.py`를 실행해 Qwen3-ASR 모델을 받으세요."
+                f"{model_path} is missing. Run `scripts/download_models.py` to download the Qwen3-ASR model."
             )
 
         def _load(dev, dt):
@@ -39,7 +39,7 @@ class Qwen3Engine:
                 raise
             import torch
 
-            print(f"[asr] {device} 로드 실패 → CPU 폴백: {e}")
+            print(f"[asr] {device} loading failed; falling back to CPU: {e}")
             self.model = _load("cpu", torch.float32)
             self.device = "cpu"
 
@@ -81,5 +81,5 @@ class Qwen3Engine:
 
                     el = time.time() - t0
                     eta_s = (n - i - 1) / ((i + 1) / el) if el else 0
-                    print(f"      [{i+1}/{n} 청크] 경과 {hms(el)} | ETA {hms(eta_s)}", flush=True)
+                    print(f"      [{i+1}/{n} chunks] Elapsed {hms(el)} | ETA {hms(eta_s)}", flush=True)
         return " ".join(parts)

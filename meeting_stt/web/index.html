@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>meeting_stt 대시보드</title>
+<title>meeting_stt Dashboard</title>
 <style>
   /* ===== Toss 스타일 디자인 시스템 (라이트/다크) ===== */
   :root{
@@ -173,55 +173,55 @@
 <header>
   <div class="brand">
     <h1>🎙️ meeting_stt</h1>
-    <span class="sub">로컬 ASR · 화자분리 · 회의록</span>
+    <span class="sub">Local ASR · Speaker diarization · Meeting notes</span>
   </div>
   <div class="spacer"></div>
-  <span id="status" class="badge idle"><span class="dot"></span>대기</span>
-  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="라이트/다크 전환">🌙</button>
+  <span id="status" class="badge idle"><span class="dot"></span>Ready</span>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
 </header>
 
 <main>
   <!-- 좌측: 컨트롤 -->
   <section class="col">
     <div class="card">
-      <h3><span class="step">1</span> 입력 소스</h3>
-      <p class="desc">녹음할 오디오 소스를 선택하세요.</p>
-      <label>소스 종류</label>
+      <h3><span class="step">1</span> Audio source</h3>
+      <p class="desc">Choose an audio source to record.</p>
+      <label>Source type</label>
       <select id="sourceType" onchange="onSourceChange()">
-        <option value="device">🎙️ 마이크 / 입력 장치</option>
-        <option value="system">🔊 시스템 전체 출력 (스피커 소리)</option>
-        <option value="app">🖥️ 앱 오디오 (특정 앱 소리)</option>
+        <option value="device">🎙️ Microphone / Input device</option>
+        <option value="system">🔊 System audio (all playback)</option>
+        <option value="app">🖥️ App audio (one app)</option>
       </select>
 
       <div id="deviceBlock">
-        <label>입력 장치</label>
+        <label>Input device</label>
         <div class="row">
           <select id="device"></select>
-          <button class="icon-btn" onclick="loadDevices()" title="새로고침">↻</button>
+          <button class="icon-btn" onclick="loadDevices()" title="Refresh">↻</button>
         </div>
-        <p class="hint">시스템 소리를 녹음하려면 BlackHole 등 가상 입력장치를 선택하세요.</p>
+        <p class="hint">To capture system audio through an input device, select a loopback device such as BlackHole.</p>
       </div>
 
       <div id="appBlock" style="display:none;">
-        <label>앱 선택 (소리 내는 앱)</label>
+        <label>Select an app playing audio</label>
         <div class="row">
           <select id="app"></select>
-          <button class="icon-btn" onclick="loadApps()" title="새로고침">↻</button>
+          <button class="icon-btn" onclick="loadApps()" title="Refresh">↻</button>
         </div>
-        <p class="hint" id="appHint">웹미팅(Zoom/Meet 등)을 선택하면 그 앱 소리만 녹음됩니다. 들으면서 녹음돼요(라우팅 불필요).</p>
+        <p class="hint" id="appHint">Select an app such as Zoom or your browser to record only its audio while you keep listening.</p>
       </div>
 
       <div id="systemBlock" style="display:none;">
-        <p class="hint">스피커로 나가는 모든 소리를 통째로 녹음합니다. 앱을 고를 필요가 없어요. 최초 1회 '오디오 녹음' 권한 허용이 필요합니다.</p>
+        <p class="hint">Record all Mac playback without selecting an app. Allow system audio recording when macOS asks.</p>
       </div>
     </div>
 
     <div class="card">
-      <h3><span class="step">2</span> 녹음</h3>
-      <p class="desc">서버(sounddevice)가 녹음합니다.</p>
+      <h3><span class="step">2</span> Recording</h3>
+      <p class="desc">Audio is recorded locally on this Mac.</p>
       <div class="row">
-        <button id="btnRec" class="rec" onclick="startRec()">● 녹음 시작</button>
-        <button id="btnStop" class="ghost" onclick="stopRec()" disabled>■ 정지</button>
+        <button id="btnRec" class="rec" onclick="startRec()">● Start recording</button>
+        <button id="btnStop" class="ghost" onclick="stopRec()" disabled>■ Stop</button>
       </div>
       <div class="hb">
         <div class="hb-row">
@@ -229,21 +229,21 @@
           <div class="vu-track"><div id="vuFill" class="vu-fill"></div></div>
         </div>
         <div class="hb-stats">
-          <span class="hb-stat">경과 <b id="elapsed">0:00:00</b></span>
-          <span class="hb-stat">기록량 <b id="recBytes">0KB</b></span>
+          <span class="hb-stat">Elapsed <b id="elapsed">0:00:00</b></span>
+          <span class="hb-stat">Recorded <b id="recBytes">0KB</b></span>
         </div>
-        <p id="noSignal" class="warn" style="display:none;">⚠ 소리가 들어오지 않습니다 — 출력 소스/권한을 확인하세요</p>
+        <p id="noSignal" class="warn" style="display:none;">⚠ No audio signal — check your source and permissions</p>
       </div>
     </div>
 
     <div class="card">
       <div class="list-head">
-        <h3><span class="step">3</span> 저장된 녹음</h3>
-        <button class="ghost" style="padding:8px 14px;font-size:13px;" onclick="loadRecordings()">새로고침</button>
+        <h3><span class="step">3</span> Saved recordings</h3>
+        <button class="ghost" style="padding:8px 14px;font-size:13px;" onclick="loadRecordings()">Refresh</button>
       </div>
-      <p class="desc">서버를 다시 시작해도 세션을 불러와 재생·전사할 수 있습니다.</p>
+      <p class="desc">Saved sessions remain available for playback and transcription after a restart.</p>
       <div id="recordingList" class="recordings-list">
-        <div class="empty">녹음 목록을 불러오는 중입니다.</div>
+        <div class="empty">Loading recordings…</div>
       </div>
       <div id="recordingDetails" style="display:none;margin-top:14px;">
         <audio id="recordingAudio" controls preload="metadata"></audio>
@@ -252,26 +252,26 @@
     </div>
 
     <div class="card">
-      <h3><span class="step">4</span> 전사 옵션</h3>
-      <p class="desc">선택한 녹음을 전사합니다.</p>
-      <label>context 키워드 (쉼표 구분)</label>
-      <input id="context" type="text" placeholder="LLM-Wiki, Qwen3-ASR, 김상규" />
+      <h3><span class="step">4</span> Transcription options</h3>
+      <p class="desc">Transcribe the selected recording.</p>
+      <label>Context keywords (comma-separated)</label>
+      <input id="context" type="text" placeholder="LLM-Wiki, Qwen3-ASR, Alex" />
       <div class="row" style="margin-top:0;">
         <div>
-          <label>화자 수 (선택)</label>
-          <input id="numSpk" type="number" min="1" placeholder="자동" />
+          <label>Speaker count (optional)</label>
+          <input id="numSpk" type="number" min="1" placeholder="Auto" />
         </div>
         <div>
-          <label>프로젝트</label>
+          <label>Project</label>
           <input id="project" type="text" placeholder="My-app" />
         </div>
       </div>
       <div class="checkbox-row">
         <input id="diarize" type="checkbox" checked />
-        <label for="diarize">화자분리 사용</label>
+        <label for="diarize">Enable speaker diarization</label>
       </div>
-      <button class="primary" style="width:100%;margin-top:18px;" id="btnTrans" onclick="transcribe()" disabled>전사 실행 ▶</button>
-      <p class="hint">녹음을 정지하거나 목록에서 선택하면 전사 대상에 올라갑니다. CPU 환경은 다소 시간이 걸립니다.</p>
+      <button class="primary" style="width:100%;margin-top:18px;" id="btnTrans" onclick="transcribe()" disabled>Transcribe ▶</button>
+      <p class="hint">Stop recording or select a saved session to transcribe. CPU processing can take a while.</p>
     </div>
   </section>
 
@@ -279,20 +279,20 @@
   <section class="col">
     <div class="card">
       <div class="viewer-head">
-        <h3>📝 전사 결과 <span class="sub" style="font-weight:500;">화자 귀속</span></h3>
-        <button class="copy-btn" id="btnCopy" onclick="copyTranscript()" disabled>복사</button>
+        <h3>📝 Transcript <span class="sub" style="font-weight:500;">By speaker</span></h3>
+        <button class="copy-btn" id="btnCopy" onclick="copyTranscript()" disabled>Copy</button>
       </div>
-      <pre id="transcript">아직 결과가 없습니다.</pre>
+      <pre id="transcript">No results yet.</pre>
     </div>
     <div class="card">
       <div class="viewer-head">
-        <h3>📄 회의록</h3>
+        <h3>📄 Meeting notes</h3>
         <div class="row" style="gap:8px;">
-          <button class="ghost" style="padding:8px 14px;font-size:13px;" id="btnNotes" onclick="makeNotes(false)" disabled>로컬 회의록</button>
-          <button class="ghost" style="padding:8px 14px;font-size:13px;" id="btnPrompt" onclick="makeNotes(true)" disabled>AI 요약 프롬프트</button>
+          <button class="ghost" style="padding:8px 14px;font-size:13px;" id="btnNotes" onclick="makeNotes(false)" disabled>Local notes</button>
+          <button class="ghost" style="padding:8px 14px;font-size:13px;" id="btnPrompt" onclick="makeNotes(true)" disabled>AI summary prompt</button>
         </div>
       </div>
-      <pre id="notes">전사 후 생성할 수 있습니다.</pre>
+      <pre id="notes">Generate notes after transcription.</pre>
     </div>
     <div id="error" class="err"></div>
   </section>
@@ -303,14 +303,14 @@
 <script>
 let lastWav = null;
 let lastTranscriptJson = null;
-let lastTranscriptText = '';     // 복사용: 화면에 표시 중인 전사 텍스트
+let lastTranscriptText = '';     // Copy용: 화면에 표시 중인 전사 텍스트
 let pollTimer = null;
 let lastBytes = 0;
 let staleCount = 0;
 let recordings = [];
 let selectedRecording = null;
 let transcribing = false;
-let pendingDeleteKey = null;     // 삭제 인라인 확인 중인 세션 키
+let pendingDeleteKey = null;     // Delete 인라인 확인 중인 세션 키
 
 /* ===== 테마 ===== */
 function applyTheme(t){
@@ -364,14 +364,14 @@ async function loadDevices(){
     const {devices} = await api('/api/devices');
     const sel = document.getElementById('device');
     sel.innerHTML = '';
-    if(!devices.length){ sel.innerHTML = '<option>입력 장치 없음</option>'; return; }
+    if(!devices.length){ sel.innerHTML = '<option>No input devices</option>'; return; }
     for(const d of devices){
       const o = document.createElement('option');
       o.value = d.index;
       o.textContent = `[${d.index}] ${d.name} (${d.channels}ch, ${d.default_samplerate}Hz)`;
       sel.appendChild(o);
     }
-  }catch(e){ showErr('장치 목록 실패: '+e.message); }
+  }catch(e){ showErr('Could not list devices: '+e.message); }
 }
 
 async function loadApps(){
@@ -381,18 +381,18 @@ async function loadApps(){
     const sel = document.getElementById('app');
     sel.innerHTML = '';
     if(!available){
-      sel.innerHTML = '<option>헬퍼 미빌드</option>';
-      document.getElementById('appHint').textContent = '앱별 캡처 헬퍼(native/apptap)가 없습니다. 빌드 후 사용하세요.';
+      sel.innerHTML = '<option>Helper not built</option>';
+      document.getElementById('appHint').textContent = 'Audio capture helper (native/apptap) is missing. Build it first.';
       return;
     }
-    if(!sources.length){ sel.innerHTML = '<option>앱 없음</option>'; return; }
+    if(!sources.length){ sel.innerHTML = '<option>No apps available</option>'; return; }
     for(const s of sources){
       const o = document.createElement('option');
       o.value = s.pid;
       o.textContent = `${s.name} (pid ${s.pid})`;
       sel.appendChild(o);
     }
-  }catch(e){ showErr('앱 목록 실패: '+e.message); }
+  }catch(e){ showErr('Could not list apps: '+e.message); }
 }
 
 function fmtBytes(b){ b = b||0; return b >= 1e6 ? (b/1e6).toFixed(1)+'MB' : Math.round(b/1024)+'KB'; }
@@ -406,20 +406,20 @@ function recordingTitle(r){
   if(r.name) return r.name;
   if(r.created_at) return r.created_at;
   if(key) return key.split('/').filter(Boolean).pop();
-  return '녹음 세션';
+  return 'Recording session';
 }
 function recordingMeta(r){
   const bits = [];
   if(r.duration_sec != null) bits.push(hms(r.duration_sec));
   if(r.bytes) bits.push(fmtBytes(r.bytes));
-  if(r.name && r.created_at) bits.push(r.created_at);  // 이름을 붙였으면 원래 시각도 표시
-  return bits.join(' · ') || 'metadata.json 없음';
+  if(r.name && r.created_at) bits.push(r.created_at);  // Name을 붙였으면 원래 시각도 표시
+  return bits.join(' · ') || 'metadata.json not found';
 }
 function setTranscribeButtons(){
   const disabled = transcribing || !selectedRecording || !recordingPath(selectedRecording);
   const main = document.getElementById('btnTrans');
   main.disabled = disabled;
-  main.textContent = (isTranscribed(selectedRecording) ? '다시 전사 ▶' : '전사 실행 ▶');
+  main.textContent = (isTranscribed(selectedRecording) ? 'Transcribe again ▶' : 'Transcribe ▶');
 }
 
 function renderRecordingList(){
@@ -429,7 +429,7 @@ function renderRecordingList(){
     selectedRecording = null;
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = '저장된 녹음이 없습니다.';
+    empty.textContent = 'No saved recordings.';
     list.appendChild(empty);
     renderSelectedRecording();
     return;
@@ -447,11 +447,11 @@ function renderRecordingList(){
     const titleBtn = document.createElement('button');
     titleBtn.className = 'ri-title-btn';
     titleBtn.textContent = recordingTitle(rec);
-    titleBtn.title = '클릭하여 선택';
+    titleBtn.title = 'Click to select';
     titleBtn.onclick = () => selectRecording(key);
     const status = document.createElement('span');
     status.className = 'ri-status ' + (isTranscribed(rec) ? 'done' : 'todo');
-    status.textContent = isTranscribed(rec) ? '전사됨' : '미전사';
+    status.textContent = isTranscribed(rec) ? 'Transcribed' : 'Not transcribed';
     top.appendChild(titleBtn);
     top.appendChild(status);
 
@@ -464,11 +464,11 @@ function renderRecordingList(){
     actions.className = 'ri-actions';
     const renameBtn = document.createElement('button');
     renameBtn.className = 'mini';
-    renameBtn.textContent = '✎ 이름';
+    renameBtn.textContent = '✎ Name';
     renameBtn.onclick = () => openRename(item, rec);
     const delBtn = document.createElement('button');
     delBtn.className = 'mini danger';
-    delBtn.textContent = '🗑 삭제';
+    delBtn.textContent = '🗑 Delete';
     delBtn.onclick = () => openDeleteConfirm(item, rec);
     actions.appendChild(renameBtn);
     actions.appendChild(delBtn);
@@ -496,12 +496,12 @@ function openRename(item, rec){
   wrap.className = 'ri-rename';
   const input = document.createElement('input');
   input.type = 'text';
-  input.placeholder = '세션 이름 (비우면 기본값)';
+  input.placeholder = 'Session name (blank for default)';
   input.value = rec.name || '';
   const save = document.createElement('button');
-  save.className = 'mini'; save.textContent = '저장';
+  save.className = 'mini'; save.textContent = 'Save';
   const cancel = document.createElement('button');
-  cancel.className = 'mini'; cancel.textContent = '취소';
+  cancel.className = 'mini'; cancel.textContent = 'Cancel';
   save.onclick = () => doRename(rec, input.value);
   cancel.onclick = () => wrap.remove();
   input.onkeydown = (e) => { if(e.key==='Enter') doRename(rec, input.value); if(e.key==='Escape') wrap.remove(); };
@@ -515,9 +515,9 @@ async function doRename(rec, name){
   try{
     await api(`/api/recordings/${encodeURIComponent(rec.session_id || rec.id)}/rename`,
       {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name: (name||'').trim()})});
-    toast('이름을 저장했어요');
+    toast('Name saved');
     await loadRecordings(key);
-  }catch(e){ showErr('이름 저장 실패: '+e.message); }
+  }catch(e){ showErr('Could not save name: '+e.message); }
 }
 
 /* --- B3: 삭제 인라인 확인 (confirm 미사용) --- */
@@ -526,11 +526,11 @@ function openDeleteConfirm(item, rec){
   const wrap = document.createElement('div');
   wrap.className = 'ri-confirm';
   const msg = document.createElement('span');
-  msg.textContent = '녹음·전사·회의록이 모두 삭제되고 되돌릴 수 없어요. 삭제할까요?';
+  msg.textContent = 'Delete this recording, transcript, and notes? This cannot be undone.';
   const yes = document.createElement('button');
-  yes.className = 'btn-del-yes'; yes.textContent = '삭제';
+  yes.className = 'btn-del-yes'; yes.textContent = 'Delete';
   const no = document.createElement('button');
-  no.className = 'btn-del-no'; no.textContent = '취소';
+  no.className = 'btn-del-no'; no.textContent = 'Cancel';
   yes.onclick = () => doDelete(rec);
   no.onclick = () => wrap.remove();
   wrap.appendChild(msg); wrap.appendChild(yes); wrap.appendChild(no);
@@ -541,17 +541,17 @@ async function doDelete(rec){
   const key = recordingKey(rec);
   try{
     const res = await api(`/api/recordings/${encodeURIComponent(rec.session_id || rec.id)}`, {method:'DELETE'});
-    toast('세션을 삭제했어요');
-    if(res && res.errors && res.errors.length){  // 일부 파일 삭제 실패는 숨기지 않고 알림
-      showErr('일부 파일을 삭제하지 못했습니다: ' + res.errors.join(' / '));
+    toast('Session deleted');
+    if(res && res.errors && res.errors.length){  // 일부 파일 Could not delete session는 숨기지 않고 알림
+      showErr('Some files could not be deleted: ' + res.errors.join(' / '));
     }
     if(selectedRecording && recordingKey(selectedRecording) === key){
       selectedRecording = null;
       lastTranscriptJson = null;
-      clearTranscriptView('아직 결과가 없습니다.');  // 삭제된 세션 텍스트가 복사되지 않도록 초기화
+      clearTranscriptView('No results yet.');  // Delete된 세션 텍스트가 Copy되지 않도록 초기화
     }
     await loadRecordings();
-  }catch(e){ showErr('삭제 실패: '+e.message); }
+  }catch(e){ showErr('Could not delete session: '+e.message); }
 }
 
 function renderSelectedRecording(){
@@ -562,7 +562,7 @@ function renderSelectedRecording(){
     audio.removeAttribute('src');
     audio.load();
     lastTranscriptJson = null;
-    clearTranscriptView();  // 선택 해제 시 복사 대상도 비운다
+    clearTranscriptView();  // 선택 해제 시 Copy 대상도 비운다
     document.getElementById('btnNotes').disabled = true;
     document.getElementById('btnPrompt').disabled = true;
     setTranscribeButtons();
@@ -571,7 +571,7 @@ function renderSelectedRecording(){
   const src = recordingAudioUrl(selectedRecording);
   if(src){ audio.src = src; } else { audio.removeAttribute('src'); }
   audio.load();
-  setText('recordingMeta', `${isTranscribed(selectedRecording) ? '전사됨' : '미전사'} · ${recordingMeta(selectedRecording)}`);
+  setText('recordingMeta', `${isTranscribed(selectedRecording) ? 'Transcribed' : 'Not transcribed'} · ${recordingMeta(selectedRecording)}`);
   panel.style.display = 'block';
   lastWav = recordingPath(selectedRecording);
   lastTranscriptJson = selectedRecording.transcript_json || selectedRecording._json_path || null;
@@ -586,12 +586,12 @@ async function selectRecording(key){
   renderSelectedRecording();
   if(!selectedRecording){ clearTranscriptView(); return; }
   if(!isTranscribed(selectedRecording)){
-    clearTranscriptView('선택한 녹음은 아직 전사되지 않았습니다.');
+    clearTranscriptView('This recording has not been transcribed yet.');
     return;
   }
   // 저장된 전사를 서버에서 불러와 화면·복사 대상을 이 세션 것으로 맞춘다.
   const sid = selectedRecording.session_id || selectedRecording.id;
-  clearTranscriptView('전사 불러오는 중…');
+  clearTranscriptView('Loading transcript…');
   try{
     const data = await api(`/api/recordings/${encodeURIComponent(sid)}/transcript`);
     const cur = selectedRecording && (selectedRecording.session_id || selectedRecording.id);
@@ -600,7 +600,7 @@ async function selectRecording(key){
     }
   }catch(e){
     const cur = selectedRecording && (selectedRecording.session_id || selectedRecording.id);
-    if(cur === sid){ clearTranscriptView('전사 결과를 불러오지 못했습니다: '+e.message); }
+    if(cur === sid){ clearTranscriptView('Could not load transcript: '+e.message); }
   }
 }
 
@@ -617,7 +617,7 @@ async function loadRecordings(preferredKey, preferredPath){
     recordings = [];
     selectedRecording = null;
     renderRecordingList();
-    showErr('녹음 목록 실패: '+e.message);
+    showErr('Could not load recordings: '+e.message);
   }
 }
 
@@ -670,11 +670,11 @@ async function startRec(){
     await api('/api/record/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     document.getElementById('btnRec').disabled = true;
     document.getElementById('btnStop').disabled = false;
-    setStatus('녹음 중', 'live');
+    setStatus('Recording', 'live');
     resetHeartbeat();
     if(pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(pollStatus, 400);
-  }catch(e){ showErr('녹음 시작 실패: '+e.message); }
+  }catch(e){ showErr('Could not start recording: '+e.message); }
 }
 
 async function stopRec(){
@@ -686,17 +686,17 @@ async function stopRec(){
     lastWav = path || lastWav;
     document.getElementById('btnRec').disabled = false;
     document.getElementById('btnStop').disabled = true;
-    setStatus('녹음 완료 ('+hms(data.duration_sec)+')', 'idle');
+    setStatus('Recording saved ('+hms(data.duration_sec)+')', 'idle');
     await loadRecordings(data.session_id || data.id, path);
-  }catch(e){ showErr('정지 실패: '+e.message); }
+  }catch(e){ showErr('Could not stop recording: '+e.message); }
 }
 
 async function transcribe(){
   const rec = selectedRecording;
   const path = rec ? recordingPath(rec) : lastWav;
-  if(!path){ showErr('녹음 파일이 없습니다.'); return; }
+  if(!path){ showErr('Recording file not found.'); return; }
   showErr('');
-  setStatus('전사 중…', 'busy');
+  setStatus('Transcribing…', 'busy');
   transcribing = true;
   setTranscribeButtons();
   const body = {
@@ -722,9 +722,9 @@ async function transcribe(){
     document.getElementById('btnPrompt').disabled = !lastTranscriptJson;
     renderRecordingList();
     renderSelectedRecording();
-    setStatus('전사 완료', 'idle');
+    setStatus('Transcription complete', 'idle');
     await loadRecordings(selectedRecording ? recordingKey(selectedRecording) : null, lastWav);
-  }catch(e){ showErr('전사 실패: '+e.message); setStatus('오류', 'idle'); }
+  }catch(e){ showErr('Transcription failed: '+e.message); setStatus('Error', 'idle'); }
   finally{ transcribing = false; setTranscribeButtons(); }
 }
 
@@ -733,12 +733,12 @@ async function transcribe(){
 function showTranscriptSegments(segments){
   const lines = (segments||[]).map(s=>`[${s.speaker}] ${hms(s.start)}~${hms(s.end)}: ${s.text}`);
   lastTranscriptText = lines.join('\n') || '';
-  document.getElementById('transcript').textContent = lastTranscriptText || '(빈 결과)';
+  document.getElementById('transcript').textContent = lastTranscriptText || '(Empty result)';
   setCopyEnabled();
 }
 function clearTranscriptView(msg){
   lastTranscriptText = '';
-  document.getElementById('transcript').textContent = msg || '아직 결과가 없습니다.';
+  document.getElementById('transcript').textContent = msg || 'No results yet.';
   setCopyEnabled();
 }
 function setCopyEnabled(){
@@ -749,15 +749,15 @@ async function copyTranscript(){
   if(!text){ return; }
   const btn = document.getElementById('btnCopy');
   const done = () => {
-    btn.textContent = '복사됨'; btn.classList.add('ok');
-    setTimeout(()=>{ btn.textContent = '복사'; btn.classList.remove('ok'); }, 1500);
+    btn.textContent = 'Copied'; btn.classList.add('ok');
+    setTimeout(()=>{ btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 1500);
   };
   try{
     if(navigator.clipboard && navigator.clipboard.writeText){
       await navigator.clipboard.writeText(text);
       done(); return;
     }
-    throw new Error('clipboard API 미지원');
+    throw new Error('Clipboard API is unavailable');
   }catch(e){
     // 폴백: textarea + execCommand
     try{
@@ -768,19 +768,19 @@ async function copyTranscript(){
       ta.focus(); ta.select();
       const ok = document.execCommand('copy');
       document.body.removeChild(ta);
-      if(ok){ done(); } else { showErr('복사에 실패했습니다.'); }
-    }catch(e2){ showErr('복사에 실패했습니다: '+e2.message); }
+      if(ok){ done(); } else { showErr('Could not copy text.'); }
+    }catch(e2){ showErr('Could not copy text: '+e2.message); }
   }
 }
 
 async function makeNotes(promptOnly){
-  if(!lastTranscriptJson){ showErr('전사 결과가 없습니다.'); return; }
+  if(!lastTranscriptJson){ showErr('No transcript available.'); return; }
   showErr('');
   try{
     const data = await api('/api/notes', {method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({transcript_json:lastTranscriptJson, project:document.getElementById('project').value||null, prompt_only:promptOnly})});
     document.getElementById('notes').textContent = data.content;
-  }catch(e){ showErr('회의록 생성 실패: '+e.message); }
+  }catch(e){ showErr('Could not generate notes: '+e.message); }
 }
 
 loadDevices();

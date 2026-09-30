@@ -7,7 +7,7 @@ enum RecordingMixer {
         let paths = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
             + (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map { "\($0)/ffmpeg" }
         guard let path = paths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-            throw MeetingSTTCoreError.recording("입출력 녹음을 합치려면 ffmpeg가 필요합니다. brew install ffmpeg로 설치하세요.")
+            throw MeetingSTTCoreError.recording("Combining microphone and system audio requires ffmpeg. Install it with brew install ffmpeg.")
         }
         return URL(fileURLWithPath: path)
     }
@@ -23,7 +23,7 @@ enum RecordingMixer {
         let systemStart = silentSystem ? microphoneStart : systemStart
         guard let microphoneStart, let systemStart,
               microphoneStart.isFinite, systemStart.isFinite else {
-            throw MeetingSTTCoreError.recording("녹음 동기화 시각이 없습니다. native/apptap을 다시 빌드하세요. 원본 microphone.wav와 system.wav는 보존했습니다.")
+            throw MeetingSTTCoreError.recording("Recording timestamps are missing. Rebuild native/apptap. The original microphone.wav and system.wav have been preserved.")
         }
         let origin = min(microphoneStart, systemStart)
         let micDelay = Int(((microphoneStart - origin) * 48_000).rounded())
@@ -44,10 +44,10 @@ enum RecordingMixer {
             currentDirectory: directory, environment: ProcessInfo.processInfo.environment
         )
         guard result.exitCode == 0 else {
-            throw MeetingSTTCoreError.recording("녹음 합치기 실패. 원본 트랙은 보존했습니다. \(result.stderr)")
+            throw MeetingSTTCoreError.recording("Could not combine the recordings. The original tracks have been preserved. \(result.stderr)")
         }
         let file = try AVAudioFile(forReading: temporary)
-        guard file.length > 0 else { throw MeetingSTTCoreError.recording("합친 녹음 파일이 비어 있습니다.") }
+        guard file.length > 0 else { throw MeetingSTTCoreError.recording("The combined recording is empty.") }
         let duration = Double(file.length) / file.fileFormat.sampleRate
         try FileManager.default.moveItem(at: temporary, to: output)
         let bytes = (try FileManager.default.attributesOfItem(atPath: output.path)[.size] as? NSNumber)?.int64Value ?? 0

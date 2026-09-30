@@ -35,7 +35,7 @@ class Diarizer:
         self.pipeline = Pipeline.from_pretrained(target, token=hf_token)
         if self.pipeline is None:
             raise RuntimeError(
-                f"화자분리 파이프라인 로드 실패: {target}. 네트워크/접근 권한을 확인하세요."
+                f"Could not load the diarization pipeline: {target}. Check your connection and access permissions."
             )
         # 1초 이하 묵음은 같은 발화로 묶는다(검증된 값). 파이프라인 구조에 따라 속성이
         # 없을 수 있어 방어적으로 설정한다.
@@ -49,7 +49,7 @@ class Diarizer:
             self.device = device
         except Exception as e:
             if device != "cpu":
-                print(f"[diarize] {device} 이동 실패 → CPU 폴백: {e}")
+                print(f"[diarize] {device} device switch failed; falling back to CPU: {e}")
                 self.pipeline = self.pipeline.to(torch.device("cpu"))
                 self.device = "cpu"
             else:

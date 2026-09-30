@@ -42,11 +42,11 @@ def _save_outputs(config: Config, stem: str, data: dict) -> tuple[Path, Path]:
 
     from .notes import format_transcript_text
 
-    md = [f"# {stem} 화자 귀속 전사\n", f"- 오디오: {data['audio_path']}",
-          f"- 모델: {data['model']}", f"- context: {data.get('context') or '없음'}",
-          f"- 화자분리: {'예' if data['diarized'] else '아니오'}\n", "```",
+    md = [f"# {stem} Speaker-attributed transcript\n", f"- Audio: {data['audio_path']}",
+          f"- Model: {data['model']}", f"- context: {data.get('context') or 'None'}",
+          f"- Speaker diarization: {'Yes' if data['diarized'] else 'No'}\n", "```",
           format_transcript_text(data), "```",
-          "\n> 회의록은 `meeting_stt notes` 또는 대시보드의 회의록 버튼으로 이 파일에 추가됩니다."]
+          "\n> Use `meeting_stt notes` or the dashboard notes button to add meeting notes to this file."]
     md_path.write_text("\n".join(md), encoding="utf-8")
     return json_path, md_path
 
@@ -71,9 +71,9 @@ def transcribe(
     stem = Path(audio_path).parent.name if Path(audio_path).name == "audio.wav" else Path(audio_path).stem
     config.outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[1/3] 오디오 로딩: {audio_path}")
+    print(f"[1/3] Loading audio: {audio_path}")
     audio, sr = audio_mod.load_audio(audio_path)
-    print(f"      길이 {len(audio)/sr/60:.1f}분, ASR 디바이스={device}")
+    print(f"      Duration {len(audio)/sr/60:.1f}min, ASR device={device}")
 
     from .asr import Qwen3Engine
 
@@ -84,11 +84,11 @@ def transcribe(
         from .diarize import Diarizer
 
         token = load_hf_token(config.root)
-        print(f"[2/3] 화자분리(pyannote) 실행 중... (device={device})")
+        print(f"[2/3] Running speaker diarization (pyannote)... (device={device})")
         diarizer = Diarizer(config.diarize_source, token, device)  # MPS 우선, 실패 시 CPU 폴백
         segments = diarizer.run(audio, sr, num_speakers=num_speakers)
         n = len(segments)
-        print(f"      세그먼트 {n}개, 화자 {len({s.speaker for s in segments})}명")
+        print(f"      {n} segments, {len({s.speaker for s in segments})} speakers")
 
         # 이전 진행분(.partial.json) 이어하기
         partial_path = config.outputs_dir / f"{stem}.partial.json"
@@ -101,11 +101,11 @@ def transcribe(
                         if s.get("text"):
                             done[i] = s["text"]
                     if done:
-                        print(f"      이어하기: 이전 {len(done)}/{n} 재사용")
+                        print(f"      Resuming: reusing {len(done)}/{n} segments")
             except Exception:
                 pass
 
-        print(f"[3/3] 전사 시작 ({n}개 구간)")
+        print(f"[3/3] Starting transcription ({n} segments)")
         t0 = time.time()
         with audio_mod.TempWav() as tmp:
             for i, seg in enumerate(segments):
@@ -121,7 +121,7 @@ def transcribe(
                     el = time.time() - t0
                     rate = (i + 1) / el if el else 0
                     eta_s = (n - i - 1) / rate if rate else 0
-                    print(f"      [{i+1}/{n}] {hms(seg.end)} 지점 | 경과 {hms(el)} | ETA {hms(eta_s)}", flush=True)
+                    print(f"      [{i+1}/{n}] {hms(seg.end)} position | Elapsed {hms(el)} | ETA {hms(eta_s)}", flush=True)
                     # 중간저장(끊겨도 보존)
                     _dump_partial(partial_path, audio_path, segments, project, date, context, diarize)
         partial_path.unlink(missing_ok=True)  # 완료 → partial 제거

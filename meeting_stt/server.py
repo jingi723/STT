@@ -81,11 +81,11 @@ def create_app():
 
     def _session_dir(session_id: str) -> Path:
         if not session_id or "/" in session_id or "\\" in session_id or session_id in (".", ".."):
-            raise HTTPException(400, "잘못된 녹음 세션입니다.")
+            raise HTTPException(400, "Invalid recording session.")
         path = (_recordings_dir() / session_id).resolve()
         root = _recordings_dir().resolve()
         if path.parent != root:
-            raise HTTPException(400, "잘못된 녹음 세션 경로입니다.")
+            raise HTTPException(400, "Invalid recording session path.")
         return path
 
     def _new_session() -> tuple[str, Path]:
@@ -202,7 +202,7 @@ def create_app():
         try:
             return {"devices": list_input_devices()}
         except Exception as e:
-            raise HTTPException(500, f"장치 목록 조회 실패(sounddevice/PortAudio 설치 확인): {e}")
+            raise HTTPException(500, f"Could not list devices (check sounddevice/PortAudio installation): {e}")
 
     @app.get("/api/app-sources")
     def app_sources():
@@ -215,9 +215,9 @@ def create_app():
     @app.post("/api/record/start")
     def record_start(body: StartBody):
         if state.recorder is not None and getattr(state.recorder, "is_recording", False):
-            raise HTTPException(409, "이미 녹음 중입니다.")
+            raise HTTPException(409, "A recording is already in progress.")
         if body.source not in {"device", "app", "system"}:
-            raise HTTPException(400, "source는 device, app, system 중 하나여야 합니다.")
+            raise HTTPException(400, "source must be device, app, or system.")
         stamp, session_dir = _new_session()
         out_path = str(session_dir / "audio.wav")
         started_at = time.time()
@@ -238,7 +238,7 @@ def create_app():
         try:
             if body.source == "app":
                 if body.pid is None:
-                    raise HTTPException(400, "앱 녹음에는 pid가 필요합니다.")
+                    raise HTTPException(400, "App recording requires a pid.")
                 rec = AppRecorder(pid=body.pid)
                 rec.start(out_path)  # 앱 캡처는 시작 시점에 파일에 기록
             elif body.source == "system":
@@ -273,7 +273,7 @@ def create_app():
     @app.post("/api/record/stop")
     def record_stop():
         if state.recorder is None or not getattr(state.recorder, "is_recording", False):
-            raise HTTPException(400, "녹음이 시작되지 않았습니다.")
+            raise HTTPException(400, "Recording has not started.")
         try:
             if state.kind in ("app", "system"):
                 out_path = state.recorder.stop()  # 네이티브가 wav finalize(인자 없음)
@@ -281,8 +281,8 @@ def create_app():
                 out_path = state.out_path
                 state.recorder.stop(out_path)
         except Exception as e:
-            _update_session_metadata("error", error=f"녹음 저장 실패: {e}", stopped_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"))
-            raise HTTPException(500, f"녹음 저장 실패: {e}")
+            _update_session_metadata("error", error=f"Could not save recording: {e}", stopped_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+            raise HTTPException(500, f"Could not save recording: {e}")
         duration = time.time() - (state.started_at or time.time())
         session_id = state.session_id
         session_dir = state.session_dir
@@ -355,7 +355,7 @@ def create_app():
         session_dir = _session_dir(session_id)
         audio_path = session_dir / "audio.wav"
         if not audio_path.exists():
-            raise HTTPException(404, "녹음 파일이 없습니다.")
+            raise HTTPException(404, "Recording file not found.")
         return FileResponse(str(audio_path), media_type="audio/wav", filename=f"{session_id}.wav")
 
     @app.get("/api/recordings/{session_id}/transcript")
@@ -363,16 +363,16 @@ def create_app():
         """저장된 전사 결과(JSON, segments 포함)를 반환. 재시작 후에도 세션의 전사를 열람·복사할 수 있게 한다."""
         session_dir = _session_dir(session_id)
         if not session_dir.exists():
-            raise HTTPException(404, "녹음 세션이 없습니다.")
+            raise HTTPException(404, "Recording session not found.")
         meta = _read_metadata(session_dir)
         tj = meta.get("transcript_json")
         jpath = Path(tj) if tj else config.outputs_dir / f"{session_id}.json"
         if not jpath.exists():
-            raise HTTPException(404, "전사 결과가 없습니다.")
+            raise HTTPException(404, "Transcript not found.")
         try:
             data = json.loads(jpath.read_text(encoding="utf-8"))
         except Exception as e:
-            raise HTTPException(500, f"전사 결과 읽기 실패: {e}")
+            raise HTTPException(500, f"Could not read transcript: {e}")
         data["_json_path"] = str(jpath)
         return JSONResponse(data)
 
@@ -382,7 +382,7 @@ def create_app():
         name = (body.name or "").strip()
         with meta_lock:
             if not session_dir.exists():  # 락 안에서 재확인 → 동시 삭제된 세션을 재생성하지 않음
-                raise HTTPException(404, "녹음 세션이 없습니다.")
+                raise HTTPException(404, "Recording session not found.")
             meta = _read_metadata(session_dir)
             if name:
                 meta["name"] = name
@@ -396,10 +396,10 @@ def create_app():
     def delete_recording(session_id: str):
         session_dir = _session_dir(session_id)
         if state.session_id == session_id and state.recorder is not None and getattr(state.recorder, "is_recording", False):
-            raise HTTPException(409, "녹음 중인 세션은 정지 후 삭제하세요.")
+            raise HTTPException(409, "Stop recording before deleting this session.")
         with meta_lock:
             if not session_dir.exists():
-                raise HTTPException(404, "녹음 세션이 없습니다.")
+                raise HTTPException(404, "Recording session not found.")
             meta = _read_metadata(session_dir)
             removed = []
             errors = []
@@ -415,7 +415,7 @@ def create_app():
                 shutil.rmtree(session_dir)
                 removed.append(str(session_dir))
             except Exception as e:
-                raise HTTPException(500, f"세션 삭제 실패: {e}")
+                raise HTTPException(500, f"Could not delete session: {e}")
         return {"status": "deleted", "session_id": session_id, "id": session_id,
                 "removed": removed, "errors": errors}
 
@@ -424,14 +424,14 @@ def create_app():
 
         audio = Path(audio_path)
         if not audio.exists():
-            raise HTTPException(404, f"오디오 파일 없음: {audio_path}")
+            raise HTTPException(404, f"Audio file not found: {audio_path}")
         try:
             data = run_transcribe(
                 audio_path=str(audio), context=body.context, num_speakers=body.num_speakers,
                 diarize=body.diarize, project=body.project, date=body.date, config=config,
             )
         except Exception as e:
-            raise HTTPException(500, f"전사 실패: {e}")
+            raise HTTPException(500, f"Transcription failed: {e}")
         try:
             session_dir = audio.resolve().parent
             is_session_audio = audio.resolve().name == "audio.wav" and session_dir.parent == _recordings_dir().resolve()
@@ -456,7 +456,7 @@ def create_app():
     @app.post("/api/recordings/{session_id}/transcribe")
     def transcribe_recording(session_id: str, body: RecordingTranscribeBody):
         if state.session_id == session_id and state.recorder is not None and getattr(state.recorder, "is_recording", False):
-            raise HTTPException(409, "녹음 중인 세션은 정지 후 전사하세요.")
+            raise HTTPException(409, "Stop recording before transcribing this session.")
         session_dir = _session_dir(session_id)
         audio_path = session_dir / "audio.wav"
         return JSONResponse(_run_transcribe(str(audio_path), body))
@@ -465,12 +465,12 @@ def create_app():
     def transcribe(body: TranscribeBody):
         if body.session_id:
             if state.session_id == body.session_id and state.recorder is not None and getattr(state.recorder, "is_recording", False):
-                raise HTTPException(409, "녹음 중인 세션은 정지 후 전사하세요.")
+                raise HTTPException(409, "Stop recording before transcribing this session.")
             audio_path = _session_dir(body.session_id) / "audio.wav"
         else:
             requested = body.audio_path or body.path
             if not requested:
-                raise HTTPException(400, "path 또는 session_id가 필요합니다.")
+                raise HTTPException(400, "path or session_id is required.")
             audio_path = Path(requested)
         return JSONResponse(_run_transcribe(str(audio_path), body))
 
@@ -481,7 +481,7 @@ def create_app():
 
         jpath = Path(body.transcript_json)
         if not jpath.exists():
-            raise HTTPException(404, f"transcript json 없음: {jpath}")
+            raise HTTPException(404, f"Transcript JSON not found: {jpath}")
         data = json.loads(jpath.read_text(encoding="utf-8"))
         project = body.project or data.get("project") or "My-app"
         if body.prompt_only:
@@ -511,5 +511,5 @@ def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
     """uvicorn으로 대시보드 구동. uvicorn은 여기서 지연 import."""
     import uvicorn
 
-    print(f"대시보드: http://{host}:{port}  (Ctrl+C로 종료)")
+    print(f"Dashboard: http://{host}:{port}  (Ctrl+C to stop)")
     uvicorn.run(create_app(), host=host, port=port)

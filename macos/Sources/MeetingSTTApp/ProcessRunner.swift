@@ -122,7 +122,7 @@ public final class NativeRecorder {
         do {
             return try JSONDecoder().decode([AppAudioSource].self, from: Data(result.stdout.utf8))
         } catch {
-            throw MeetingSTTCoreError.processLaunch("apptap list JSON 해석 실패: \(error.localizedDescription)")
+            throw MeetingSTTCoreError.processLaunch("Could not parse apptap list JSON: \(error.localizedDescription)")
         }
     }
 
@@ -174,7 +174,7 @@ public final class NativeRecorder {
             throw MeetingSTTCoreError.processFailed(
                 executable: environment.appTapURL.path,
                 status: result.exitCode,
-                stderr: result.stderr.isEmpty && !exited ? "SIGTERM 후 5초 안에 WAV finalize가 끝나지 않았습니다." : result.stderr
+                stderr: result.stderr.isEmpty && !exited ? "WAV finalization did not finish within 5 seconds of SIGTERM." : result.stderr
             )
         }
         let bytes = try Self.validateWAV(recording.outputURL)
@@ -257,12 +257,12 @@ public final class NativeRecorder {
               let number = attributes[.size] as? NSNumber,
               number.int64Value > 44
         else {
-            throw MeetingSTTCoreError.recording("WAV finalize 후 파일이 없거나 비어 있습니다: \(url.path)")
+            throw MeetingSTTCoreError.recording("The finalized WAV file is missing or empty: \(url.path)")
         }
         var audioFile: AudioFileID?
         let status = AudioFileOpenURL(url as CFURL, .readPermission, 0, &audioFile)
         guard status == noErr, let audioFile else {
-            throw MeetingSTTCoreError.recording("WAV finalize 결과를 열 수 없습니다 (OSStatus \(status)): \(url.path)")
+            throw MeetingSTTCoreError.recording("Could not open the finalized WAV (OSStatus \(status)): \(url.path)")
         }
         AudioFileClose(audioFile)
         return number.int64Value
@@ -330,7 +330,7 @@ private final class NativeRecording: @unchecked Sendable {
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             drain(self.stderr.fileHandleForReading, buffer: self.stderrBuffer) { [self] line in
-                if line.contains("녹음 시작") { self.stateLock.withLock { self.started = true } }
+                if line.contains("Recording started") { self.stateLock.withLock { self.started = true } }
                 if !line.isEmpty { self.onLog(line) }
             }
             group.leave()

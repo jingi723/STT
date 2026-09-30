@@ -21,22 +21,22 @@ public enum MeetingSTTCoreError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .projectRootNotFound(let tried):
-            return "meeting_stt 프로젝트 루트를 찾을 수 없습니다. 확인한 경로: \(tried.joined(separator: ", "))"
+            return "Could not locate the meeting_stt project root. Searched: \(tried.joined(separator: ", "))"
         case .missingProjectPaths(let urls):
-            return "프로젝트 필수 경로가 없습니다: \(urls.map(\.path).joined(separator: ", "))"
-        case .invalidSessionID(let id): return "잘못된 녹음 세션 ID입니다: \(id)"
-        case .sessionNotFound(let id): return "녹음 세션이 없습니다: \(id)"
-        case .corruptMetadata(let url, let error): return "metadata를 읽을 수 없어 원본을 보존했습니다 (\(url.path)): \(error.localizedDescription)"
-        case .invalidTranscript(let url, let reason): return "전사 결과가 올바르지 않습니다 (\(url.path)): \(reason)"
-        case .unsafePath(let url): return "outputs 밖 경로에는 작업할 수 없습니다: \(url.path)"
-        case .activeSession(let id): return "녹음 중인 세션은 정지 후 삭제하세요: \(id)"
-        case .processAlreadyRunning: return "이미 실행 중인 작업이 있습니다."
-        case .noProcessRunning: return "실행 중인 작업이 없습니다."
-        case .processLaunch(let message): return "프로세스를 시작하지 못했습니다: \(message)"
+            return "Required project paths are missing: \(urls.map(\.path).joined(separator: ", "))"
+        case .invalidSessionID(let id): return "Invalid recording session ID: \(id)"
+        case .sessionNotFound(let id): return "Recording session not found: \(id)"
+        case .corruptMetadata(let url, let error): return "Could not read metadata; the original has been preserved (\(url.path)): \(error.localizedDescription)"
+        case .invalidTranscript(let url, let reason): return "Invalid transcript (\(url.path)): \(reason)"
+        case .unsafePath(let url): return "Cannot modify paths outside outputs: \(url.path)"
+        case .activeSession(let id): return "Stop the recording before deleting this session: \(id)"
+        case .processAlreadyRunning: return "A task is already running."
+        case .noProcessRunning: return "No task is running."
+        case .processLaunch(let message): return "Could not start the process: \(message)"
         case .processFailed(let executable, let status, let stderr):
             let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            return "\(executable)이 종료 코드 \(status)로 실패했습니다.\(detail.isEmpty ? "" : "\n\(detail)")"
-        case .missingOutput(let url): return "작업은 종료됐지만 예상 결과가 없습니다: \(url.path)"
+            return "\(executable) failed with exit code \(status).\(detail.isEmpty ? "" : "\n\(detail)")"
+        case .missingOutput(let url): return "The task finished but its expected output is missing: \(url.path)"
         case .recording(let message): return message
         }
     }
@@ -218,7 +218,7 @@ public final class SessionStore: @unchecked Sendable {
                 if metadata["status"] as? String == "recording" {
                     let recovered = isValidWAV(audioURL)
                     metadata["status"] = recovered ? "recorded" : "error"
-                    if !recovered { metadata["error"] = "앱 종료 후 유효한 WAV를 찾지 못했습니다." }
+                    if !recovered { metadata["error"] = "No valid WAV was found after the app quit." }
                     try writeMetadata(metadata, directory: directory)
                 }
                 if !metadata.isEmpty || fileManager.fileExists(atPath: audioURL.path) {
@@ -232,7 +232,7 @@ public final class SessionStore: @unchecked Sendable {
     public func create(source: String, device: AudioDeviceID? = nil, pid: pid_t? = nil) throws -> RecordingSession {
         try lock.withLock {
             guard ["device", "app", "system", "systemAndMic"].contains(source) else {
-                throw MeetingSTTCoreError.recording("지원하지 않는 녹음 소스입니다: \(source)")
+                throw MeetingSTTCoreError.recording("Unsupported recording source: \(source)")
             }
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -323,7 +323,7 @@ public final class SessionStore: @unchecked Sendable {
                 try fileManager.removeItem(at: directory)
                 removed.append(directory)
             } catch {
-                throw MeetingSTTCoreError.recording("세션 삭제 실패 (\(directory.path)): \(error.localizedDescription)")
+                throw MeetingSTTCoreError.recording("Could not delete session (\(directory.path)): \(error.localizedDescription)")
             }
             return DeletionResult(removed: removed, errors: errors)
         }
@@ -341,7 +341,7 @@ public final class SessionStore: @unchecked Sendable {
             do {
                 let document = try JSONDecoder().decode(TranscriptDocument.self, from: Data(contentsOf: url))
                 guard document.audioPath == directory.appendingPathComponent("audio.wav").path else {
-                    throw MeetingSTTCoreError.invalidTranscript(url, "audio_path가 세션 오디오와 다릅니다.")
+                    throw MeetingSTTCoreError.invalidTranscript(url, "audio_path does not match the session audio.")
                 }
                 return document
             } catch let error as MeetingSTTCoreError {
@@ -395,7 +395,7 @@ public final class SessionStore: @unchecked Sendable {
 
     private func writeMetadata(_ metadata: [String: Any], directory: URL) throws {
         guard JSONSerialization.isValidJSONObject(metadata) else {
-            throw MeetingSTTCoreError.recording("metadata에 JSON으로 저장할 수 없는 값이 있습니다.")
+            throw MeetingSTTCoreError.recording("Metadata contains a value that cannot be saved as JSON.")
         }
         let data = try JSONSerialization.data(
             withJSONObject: metadata,

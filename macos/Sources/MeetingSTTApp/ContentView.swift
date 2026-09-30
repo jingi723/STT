@@ -32,9 +32,9 @@ struct ContentView: View {
                         resultsSection
                     } else {
                         ContentUnavailableView(
-                            "녹음을 선택하세요",
+                            "Select a recording",
                             systemImage: "waveform",
-                            description: Text("새 녹음을 시작하거나 왼쪽 목록에서 저장된 녹음을 선택할 수 있습니다.")
+                            description: Text("Start a new recording or select a saved recording on the left.")
                         )
                     }
                     logSection
@@ -43,31 +43,31 @@ struct ContentView: View {
                 .frame(maxWidth: Layout.contentMaximum, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
-            .navigationTitle(model.selectedSession.map(model.sessionTitle) ?? "회의 전사")
+            .navigationTitle(model.selectedSession.map(model.sessionTitle) ?? "Meeting STT")
         }
         .task { await model.start() }
-        .alert("이름 변경", isPresented: renamePresented) {
-            TextField("세션 이름", text: $renameDraft)
+        .alert("Rename", isPresented: renamePresented) {
+            TextField("Session name", text: $renameDraft)
                 .focused($renameFieldFocused)
-            Button("취소", role: .cancel) { renameSessionID = nil }
-            Button("저장") {
+            Button("Cancel", role: .cancel) { renameSessionID = nil }
+            Button("Save") {
                 guard let id = renameSessionID else { return }
                 model.renameSession(id: id, name: renameDraft)
                 renameSessionID = nil
             }
             .keyboardShortcut(.defaultAction)
         } message: {
-            Text("비워 두면 날짜 기반 기본 이름을 사용합니다.")
+            Text("Leave blank to use the default date-based name.")
         }
-        .alert("세션을 삭제할까요?", isPresented: deletePresented) {
-            Button("취소", role: .cancel) { deleteSessionID = nil }
-            Button("삭제", role: .destructive) {
+        .alert("Delete this session?", isPresented: deletePresented) {
+            Button("Cancel", role: .cancel) { deleteSessionID = nil }
+            Button("Delete", role: .destructive) {
                 guard let id = deleteSessionID else { return }
                 model.deleteSession(id: id)
                 deleteSessionID = nil
             }
         } message: {
-            Text("녹음과 이 세션에서 만든 전사·회의록 파일이 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.")
+            Text("This deletes the recording and its transcripts and notes. This cannot be undone.")
         }
         .onChange(of: transcriptSearchText) { _, _ in updateTranscriptSearch() }
         .onChange(of: model.currentResultText) { _, _ in updateTranscriptSearch() }
@@ -78,9 +78,9 @@ struct ContentView: View {
         VStack(spacing: 0) {
             if model.sessions.isEmpty {
                 ContentUnavailableView(
-                    "저장된 녹음이 없습니다",
+                    "No saved recordings",
                     systemImage: "waveform.badge.plus",
-                    description: Text("오른쪽에서 소스를 선택하고 첫 녹음을 시작하세요.")
+                    description: Text("Choose an audio source on the right to start your first recording.")
                 )
             } else {
                 List(selection: $model.selectedSessionID) {
@@ -88,9 +88,9 @@ struct ContentView: View {
                         sessionRow(session)
                             .tag(Optional(session.id))
                             .contextMenu {
-                                Button("이름 변경…") { beginRename(session) }
+                                Button("Rename…") { beginRename(session) }
                                     .disabled(model.isBusy)
-                                Button("삭제…", role: .destructive) { deleteSessionID = session.id }
+                                Button("Delete…", role: .destructive) { deleteSessionID = session.id }
                                     .disabled(model.isBusy)
                             }
                     }
@@ -98,13 +98,13 @@ struct ContentView: View {
                 .onChange(of: model.selectedSessionID) { _, _ in Task { await model.loadSelectedSession() } }
             }
         }
-        .navigationTitle("저장된 녹음")
+        .navigationTitle("Saved recordings")
         .toolbar {
             ToolbarItem {
                 Button {
                     model.refreshSessions()
                 } label: {
-                    Label("녹음 목록 새로고침", systemImage: "arrow.clockwise")
+                    Label("Refresh recordings", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: .command)
                 .disabled(model.isBusy)
@@ -119,7 +119,7 @@ struct ContentView: View {
                 .lineLimit(1)
             HStack(spacing: Layout.small) {
                 Label(
-                    session.transcribed ? "전사됨" : model.sessionStatus(session),
+                    session.transcribed ? "Transcribed" : model.sessionStatus(session),
                     systemImage: session.transcribed ? "checkmark.circle.fill" : "waveform"
                 )
                 .foregroundStyle(session.transcribed ? Color.green : Color.secondary)
@@ -147,12 +147,12 @@ struct ContentView: View {
                     Text(error)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("닫기") { model.dismissError() }
+                    Button("Dismiss") { model.dismissError() }
                 }
             }
-            .accessibilityLabel("오류: \(error)")
+            .accessibilityLabel("Error: \(error)")
         } else if !model.rootPath.isEmpty {
-            LabeledContent("프로젝트") {
+            LabeledContent("Project") {
                 Text(model.rootPath)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -163,9 +163,9 @@ struct ContentView: View {
     }
 
     private var recordingSection: some View {
-        GroupBox("녹음") {
+        GroupBox("Recording") {
             VStack(alignment: .leading, spacing: Layout.medium) {
-                Picker("오디오 소스", selection: $model.captureSource) {
+                Picker("Audio source", selection: $model.captureSource) {
                     ForEach(CaptureSource.allCases) { source in
                         Label(source.title, systemImage: source.systemImage).tag(source)
                     }
@@ -182,7 +182,7 @@ struct ContentView: View {
                             Task { await model.stopRecording() }
                         } label: {
                             Label(
-                                model.isStartingRecording ? "준비 중…" : (model.isStopping ? "정지 중…" : "녹음 정지"),
+                                model.isStartingRecording ? "Preparing…" : (model.isStopping ? "Stopping…" : "Stop recording"),
                                 systemImage: "stop.fill"
                             )
                         }
@@ -192,7 +192,7 @@ struct ContentView: View {
                         Button {
                             Task { await model.startRecording() }
                         } label: {
-                            Label("녹음 시작", systemImage: "record.circle")
+                            Label("Start recording", systemImage: "record.circle")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(!model.canStartRecording)
@@ -206,17 +206,17 @@ struct ContentView: View {
                 if model.isRecordingOrStopping {
                     Grid(alignment: .leading, horizontalSpacing: Layout.large, verticalSpacing: Layout.small) {
                         GridRow {
-                            Text("경과 시간")
+                            Text("Elapsed time")
                             Text(clockText(model.elapsed, alwaysShowHours: true))
                                 .monospacedDigit()
                         }
                         GridRow {
-                            Text("파일 크기")
+                            Text("File size")
                             Text(ByteCountFormatter.string(fromByteCount: model.recordedBytes, countStyle: .file))
                                 .monospacedDigit()
                         }
                         GridRow {
-                            Text(model.captureSource == .systemAndMic ? "입출력 레벨" : (model.captureSource == .device ? "입력 레벨" : "출력 레벨"))
+                            Text(model.captureSource == .systemAndMic ? "Input / output level" : (model.captureSource == .device ? "Input level" : "Output level"))
                             HStack(spacing: Layout.small) {
                                 ProgressView(value: model.rmsLevel, total: 1)
                                     .frame(minWidth: Layout.compactControl)
@@ -224,7 +224,7 @@ struct ContentView: View {
                                     .monospacedDigit()
                                     .frame(width: 44, alignment: .trailing)
                             }
-                            .accessibilityLabel(model.captureSource == .systemAndMic ? "입출력 레벨" : (model.captureSource == .device ? "입력 레벨" : "출력 레벨"))
+                            .accessibilityLabel(model.captureSource == .systemAndMic ? "Input / output level" : (model.captureSource == .device ? "Input level" : "Output level"))
                             .accessibilityValue(model.rmsLevel.formatted(.percent.precision(.fractionLength(0))))
                         }
                     }
@@ -239,14 +239,14 @@ struct ContentView: View {
         switch model.captureSource {
         case .device, .systemAndMic:
             if model.captureSource == .systemAndMic {
-                Text("Mac의 모든 출력 소리와 선택한 마이크를 함께 녹음합니다.")
+                Text("Record all Mac audio together with your selected microphone.")
                     .foregroundStyle(.secondary)
             }
-            LabeledContent("입력 장치") {
+            LabeledContent("Input device") {
                 HStack(spacing: Layout.small) {
-                    Picker("입력 장치", selection: $model.selectedDeviceID) {
+                    Picker("Input device", selection: $model.selectedDeviceID) {
                         if model.devices.isEmpty {
-                            Text("사용 가능한 장치 없음").tag(Optional<AudioDeviceID>.none)
+                            Text("No input devices available").tag(Optional<AudioDeviceID>.none)
                         }
                         ForEach(model.devices) { device in
                             Text(model.deviceTitle(device)).tag(Optional(device.id))
@@ -256,18 +256,18 @@ struct ContentView: View {
                     Button {
                         model.refreshDevices()
                     } label: {
-                        Label("입력 장치 새로고침", systemImage: "arrow.clockwise")
+                        Label("Refresh input devices", systemImage: "arrow.clockwise")
                     }
                     .labelStyle(.iconOnly)
-                    .help("입력 장치 새로고침")
+                    .help("Refresh input devices")
                 }
             }
         case .app:
-            LabeledContent("대상 앱") {
+            LabeledContent("Target app") {
                 HStack(spacing: Layout.small) {
-                    Picker("대상 앱", selection: $model.selectedAppPID) {
+                    Picker("Target app", selection: $model.selectedAppPID) {
                         if model.apps.isEmpty {
-                            Text("캡처 가능한 앱 없음").tag(Optional<pid_t>.none)
+                            Text("No apps available for capture").tag(Optional<pid_t>.none)
                         }
                         ForEach(model.apps) { app in
                             Text(model.appTitle(app)).tag(Optional(app.pid))
@@ -277,27 +277,27 @@ struct ContentView: View {
                     Button {
                         Task { await model.refreshApps() }
                     } label: {
-                        Label("앱 목록 새로고침", systemImage: "arrow.clockwise")
+                        Label("Refresh apps", systemImage: "arrow.clockwise")
                     }
                     .labelStyle(.iconOnly)
-                    .help("앱 목록 새로고침")
+                    .help("Refresh apps")
                 }
             }
         case .system:
-            LabeledContent("대상") {
-                Text("이 Mac의 전체 시스템 출력")
+            LabeledContent("Source") {
+                Text("All audio playing on this Mac")
                     .foregroundStyle(.secondary)
             }
         }
     }
 
     private func sessionSection(_ session: RecordingSession) -> some View {
-        GroupBox("선택한 녹음") {
+        GroupBox("Selected recording") {
             VStack(alignment: .leading, spacing: Layout.medium) {
-                LabeledContent("세션") { Text(session.id).textSelection(.enabled) }
-                LabeledContent("상태") { Text(model.sessionStatus(session)) }
+                LabeledContent("Session") { Text(session.id).textSelection(.enabled) }
+                LabeledContent("Status") { Text(model.sessionStatus(session)) }
                 if let audioURL = session.audioURL {
-                    LabeledContent("파일") {
+                    LabeledContent("File") {
                         Text(audioURL.path)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -308,7 +308,7 @@ struct ContentView: View {
                     Button {
                         model.togglePlayback()
                     } label: {
-                        Label(model.isPlaying ? "일시 정지" : "재생", systemImage: model.isPlaying ? "pause.fill" : "play.fill")
+                        Label(model.isPlaying ? "Pause" : "Play", systemImage: model.isPlaying ? "pause.fill" : "play.fill")
                     }
                     .disabled(session.audioURL == nil)
 
@@ -319,7 +319,7 @@ struct ContentView: View {
                         ),
                         in: 0...max(model.playbackDuration, 1)
                     )
-                    .accessibilityLabel("재생 위치")
+                    .accessibilityLabel("Playback position")
                     Text(clockText(model.playbackPosition))
                         .monospacedDigit()
                     Text("/")
@@ -328,9 +328,9 @@ struct ContentView: View {
                         .monospacedDigit()
 
                     Spacer()
-                    Button("이름 변경…") { beginRename(session) }
+                    Button("Rename…") { beginRename(session) }
                         .disabled(model.isBusy)
-                    Button("삭제…", role: .destructive) { deleteSessionID = session.id }
+                    Button("Delete…", role: .destructive) { deleteSessionID = session.id }
                         .disabled(model.isBusy)
                 }
             }
@@ -339,26 +339,26 @@ struct ContentView: View {
     }
 
     private func transcriptionSection(_ session: RecordingSession) -> some View {
-        GroupBox("전사") {
+        GroupBox("Transcript") {
             VStack(alignment: .leading, spacing: Layout.medium) {
-                TextField("Context 키워드 (쉼표 구분)", text: $model.context)
+                TextField("Context keywords (comma-separated)", text: $model.context)
                     .disabled(model.isBusy)
                 HStack(spacing: Layout.large) {
-                    Picker("화자 수", selection: $model.speakerCount) {
-                        Text("자동").tag(Optional<Int>.none)
+                    Picker("Speakers", selection: $model.speakerCount) {
+                        Text("Auto").tag(Optional<Int>.none)
                         ForEach(1...20, id: \.self) { count in
-                            Text("\(count)명").tag(Optional(count))
+                            Text("\(count) speakers").tag(Optional(count))
                         }
                     }
                     .frame(maxWidth: Layout.compactControl)
-                    TextField("프로젝트", text: $model.project)
-                    Toggle("화자분리", isOn: $model.diarize)
+                    TextField("Project", text: $model.project)
+                    Toggle("Speaker diarization", isOn: $model.diarize)
                 }
                 .disabled(model.isBusy)
 
                 HStack(spacing: Layout.small) {
                     if model.isWorkerRunning {
-                        Button("작업 취소", role: .cancel) {
+                        Button("Cancel task", role: .cancel) {
                             Task { await model.cancelWorker() }
                         }
                         .keyboardShortcut(.cancelAction)
@@ -366,7 +366,7 @@ struct ContentView: View {
                         Button {
                             Task { await model.transcribe(sessionID: session.id) }
                         } label: {
-                            Label(session.transcribed ? "다시 전사" : "전사 시작", systemImage: "text.waveform")
+                            Label(session.transcribed ? "Transcribe again" : "Start transcription", systemImage: "text.waveform")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(!model.canRunWorker || session.audioURL == nil)
@@ -380,30 +380,30 @@ struct ContentView: View {
     }
 
     private var resultsSection: some View {
-        GroupBox("결과") {
+        GroupBox("Results") {
             VStack(alignment: .leading, spacing: Layout.medium) {
                 HStack(spacing: Layout.small) {
-                    Picker("결과 종류", selection: $model.resultKind) {
+                    Picker("Result type", selection: $model.resultKind) {
                         ForEach(ResultKind.allCases) { kind in Text(kind.title).tag(kind) }
                     }
                     .pickerStyle(.segmented)
                     Spacer()
-                    Button("회의록 생성") {
+                    Button("Generate notes") {
                         Task { await model.generateNotes(promptOnly: false) }
                     }
                     .disabled(!model.canGenerateNotes)
-                    Button("AI 회의록") {
+                    Button("AI notes") {
                         Task { await model.generateNotes(promptOnly: false, ai: true) }
                     }
                     .disabled(!model.canGenerateNotes)
-                    Button("AI 요약 프롬프트") {
+                    Button("AI summary prompt") {
                         Task { await model.generateNotes(promptOnly: true) }
                     }
                     .disabled(!model.canGenerateNotes)
                     Button {
                         model.copyCurrentResult()
                     } label: {
-                        Label("현재 결과 복사", systemImage: "doc.on.doc")
+                        Label("Copy current result", systemImage: "doc.on.doc")
                     }
                     .disabled(model.currentResultText.isEmpty)
                 }
@@ -414,7 +414,7 @@ struct ContentView: View {
 
                 if model.currentResultText.isEmpty {
                     ContentUnavailableView(
-                        "표시할 결과가 없습니다",
+                        "No results yet",
                         systemImage: "doc.text",
                         description: Text(model.resultKind.emptyDescription)
                     )
@@ -435,14 +435,14 @@ struct ContentView: View {
     private var transcriptSearchBar: some View {
         HStack(spacing: Layout.small) {
             Button { transcriptSearchFocused = true } label: {
-                Label("전사 검색", systemImage: "magnifyingglass")
+                Label("Search transcript", systemImage: "magnifyingglass")
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .keyboardShortcut("f", modifiers: .command)
-            .help("전사 검색 (⌘F)")
-            TextField("전사 내용 검색", text: $transcriptSearchText)
+            .help("Search transcript (⌘F)")
+            TextField("Search transcript", text: $transcriptSearchText)
                 .textFieldStyle(.plain)
                 .focused($transcriptSearchFocused)
                 .onSubmit { selectNextTranscriptMatch() }
@@ -451,16 +451,16 @@ struct ContentView: View {
                 Text(transcriptSearchCountText)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("검색 결과 \(transcriptSearchCountText)")
+                    .accessibilityLabel("Search results \(transcriptSearchCountText)")
 
                 Button { selectPreviousTranscriptMatch() } label: {
-                    Label("이전 검색 결과", systemImage: "chevron.up")
+                    Label("Previous match", systemImage: "chevron.up")
                 }
                 .labelStyle(.iconOnly)
                 .disabled(transcriptSearchMatches.isEmpty)
 
                 Button { selectNextTranscriptMatch() } label: {
-                    Label("다음 검색 결과", systemImage: "chevron.down")
+                    Label("Next match", systemImage: "chevron.down")
                 }
                 .labelStyle(.iconOnly)
                 .disabled(transcriptSearchMatches.isEmpty)
@@ -469,7 +469,7 @@ struct ContentView: View {
                     transcriptSearchText = ""
                     transcriptSearchFocused = true
                 } label: {
-                    Label("검색어 지우기", systemImage: "xmark.circle.fill")
+                    Label("Clear search", systemImage: "xmark.circle.fill")
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
@@ -482,7 +482,7 @@ struct ContentView: View {
     }
 
     private var transcriptSearchCountText: String {
-        guard !transcriptSearchMatches.isEmpty else { return "0개" }
+        guard !transcriptSearchMatches.isEmpty else { return "0 matches" }
         return "\(selectedTranscriptMatch + 1)/\(transcriptSearchMatches.count)"
     }
 
@@ -530,9 +530,9 @@ struct ContentView: View {
     }
 
     private var logSection: some View {
-        DisclosureGroup("작업 로그") {
+        DisclosureGroup("Activity log") {
             if model.logLines.isEmpty {
-                Text("아직 작업 로그가 없습니다.")
+                Text("No activity yet.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, Layout.small)

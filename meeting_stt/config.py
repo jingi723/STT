@@ -93,7 +93,7 @@ def load_hf_token(root: "Path | None" = None) -> str:
             return token
 
     raise FileNotFoundError(
-        "HuggingFace 토큰을 찾을 수 없습니다. 다음 중 하나로 설정하세요:\n"
-        "  - 환경변수: export HF_TOKEN=hf_...\n"
-        "  - .env 파일: 프로젝트 루트에 'HF_TOKEN=hf_...' 한 줄"
+        "Hugging Face token not found. Set it using one of the following:\n"
+        "  - Environment variable: export HF_TOKEN=hf_...\n"
+        "  - .env file: add 'HF_TOKEN=hf_...' at the project root"
     )

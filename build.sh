@@ -1,55 +1,48 @@
 #!/bin/bash
-# meeting_stt 빌드/셋업 — 한 파일로 통합 (macOS)
-#   venv·의존성 · ffmpeg 확인 · 앱캡처 헬퍼(apptap) 빌드 · 모델 다운로드 · 런처 아이콘 적용
-#
-# 사용:
-#   bash build.sh           # 전체 (처음 셋업)
-#   bash build.sh deps      # venv + 의존성만
-#   bash build.sh apptap    # 앱캡처 헬퍼만 빌드
-#   bash build.sh app       # SwiftUI 앱만 빌드
-#   bash build.sh icon      # 런처 아이콘만 재적용
-#   bash build.sh models    # 모델만 다운로드 (.env 의 HF_TOKEN 필요)
+# Build and set up Meeting STT on macOS.
+# Usage: bash build.sh [all|prereqs|deps|apptap|app|icon|models]
+# all: Python environment, helper, app, icons, and model downloads.
 set -e
 cd "$(dirname "$0")"
 PY=STT_env/bin/python
 log(){ printf "\n▶ %s\n" "$1"; }
 
 check_prereqs(){
-  log "사전 준비물 점검"
+  log "Checking prerequisites"
   # Homebrew
   if ! command -v brew >/dev/null; then
-    echo "  ⚠ Homebrew 없음 → https://brew.sh 에서 설치 후 다시 실행하세요."
+    echo "  ⚠ Homebrew is missing. Install it from https://brew.sh and try again."
   fi
   # Python 3.12
   if ! command -v python3.12 >/dev/null && [ ! -x /opt/homebrew/bin/python3.12 ]; then
-    if command -v brew >/dev/null; then echo "  python@3.12 설치..."; brew install python@3.12; else echo "  ⚠ Python 3.12 필요"; fi
+    if command -v brew >/dev/null; then echo "  python@3.12 Installing..."; brew install python@3.12; else echo "  ⚠ Python 3.12 is required"; fi
   else echo "  Python 3.12 OK"; fi
   # ffmpeg
   if ! command -v ffmpeg >/dev/null; then
-    if command -v brew >/dev/null; then echo "  ffmpeg 설치..."; brew install ffmpeg; else echo "  ⚠ ffmpeg 필요"; fi
+    if command -v brew >/dev/null; then echo "  Installing ffmpeg..."; brew install ffmpeg; else echo "  ⚠ ffmpeg is required"; fi
   else echo "  ffmpeg OK"; fi
-  # Xcode CLT (swiftc) — 앱오디오 캡처용. 없으면 안내만(자동설치 불가)
-  if command -v swiftc >/dev/null; then echo "  swiftc OK"; else echo "  ⚠ swiftc 없음 → 'xcode-select --install' (앱 오디오 캡처에 필요)"; fi
-  # HF 토큰
+  # Xcode Command Line Tools are required for native audio capture.
+  if command -v swiftc >/dev/null; then echo "  swiftc OK"; else echo "  ⚠ swiftc is missing; run 'xcode-select --install' (required for audio capture)"; fi
+  # Hugging Face token
   if [ -n "$HF_TOKEN" ] || { [ -f .env ] && grep -q '^HF_TOKEN=' .env; }; then echo "  HF_TOKEN OK"; else
-    echo "  ⚠ HF 토큰 없음 → 'cp .env.example .env' 후 토큰 입력 (모델 다운로드에 필요)"; fi
+    echo "  ⚠ HF token is missing: 'cp .env.example .env' and enter your token (needed to download models)"; fi
 }
 
 setup_deps(){
-  log "venv + 의존성"
+  log "Python environment and dependencies"
   if [ ! -x "$PY" ]; then
     P312="$(command -v python3.12 || echo /opt/homebrew/bin/python3.12)"
-    [ -x "$P312" ] || { echo "  ✗ Python 3.12를 찾을 수 없습니다. 먼저 설치하세요."; exit 1; }
+    [ -x "$P312" ] || { echo "  ✗ Python 3.12 was not found. Install it first."; exit 1; }
     "$P312" -m venv STT_env
   fi
   "$PY" -m pip install -q --upgrade pip
   "$PY" -m pip install -q -r requirements.txt
-  echo "  의존성 OK"
+  echo "  Dependencies OK"
 }
 
 build_apptap(){
-  log "앱캡처 헬퍼(apptap) 빌드 — Core Audio Process Tap"
-  command -v swiftc >/dev/null || { echo "  ⚠ swiftc 없음(Xcode CLT 필요) → 건너뜀"; return 0; }
+  log "Building audio capture helper (Core Audio Process Tap)"
+  command -v swiftc >/dev/null || { echo "  ⚠ swiftc is missing (Xcode Command Line Tools required); skipping"; return 0; }
   PLIST="$(mktemp /tmp/apptap_plist.XXXXXX)"
   cat > "$PLIST" <<'PLISTEOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -58,8 +51,8 @@ build_apptap(){
   <key>CFBundleIdentifier</key><string>com.meetingstt.apptap</string>
   <key>CFBundleName</key><string>apptap</string>
   <key>CFBundleExecutable</key><string>apptap</string>
-  <key>NSAudioCaptureUsageDescription</key><string>회의 오디오 전사를 위해 선택한 앱의 오디오를 녹음합니다.</string>
-  <key>NSMicrophoneUsageDescription</key><string>회의 오디오 전사를 위해 오디오를 녹음합니다.</string>
+  <key>NSAudioCaptureUsageDescription</key><string>Record app or system audio for meeting transcription.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Record audio for meeting transcription.</string>
 </dict></plist>
 PLISTEOF
   swiftc -O native/apptap.swift -o native/apptap \
@@ -71,11 +64,11 @@ PLISTEOF
 }
 
 build_app(){
-  log "SwiftUI 앱 빌드"
-  command -v swift >/dev/null || { echo "  ✗ swift 없음 → 'xcode-select --install' 후 다시 실행하세요."; exit 1; }
-  command -v swiftc >/dev/null || { echo "  ✗ swiftc 없음 → 'xcode-select --install' 후 다시 실행하세요."; exit 1; }
+  log "Building SwiftUI app"
+  command -v swift >/dev/null || { echo "  ✗ swift is missing. Run 'xcode-select --install' and try again."; exit 1; }
+  command -v swiftc >/dev/null || { echo "  ✗ swiftc is missing. Run 'xcode-select --install' and try again."; exit 1; }
 
-  local APP="STT실행.app"
+  local APP="Meeting STT.app"
   local MACOS="$APP/Contents/MacOS"
   local RESOURCES="$APP/Contents/Resources"
   swift build --package-path macos -c release
@@ -85,13 +78,13 @@ build_app(){
   cp assets/stt-icon.icns "$RESOURCES/icon.icns"
   codesign --force --deep --sign - "$APP"
   touch "$APP"
-  echo "  앱 OK ($(pwd)/$APP)"
+  echo "  App OK ($(pwd)/$APP)"
 }
 
 apply_icon(){
-  log "런처 아이콘 적용"
-  local ICNS="assets/stt-icon.icns" TARGET="STT실행.command"
-  [ -f "$ICNS" ] && [ -f "$TARGET" ] || { echo "  ⚠ 아이콘/런처 없음 → 건너뜀"; return 0; }
+  log "Applying launcher icon"
+  local ICNS="assets/stt-icon.icns" TARGET="Meeting STT.command"
+  [ -f "$ICNS" ] && [ -f "$TARGET" ] || { echo "  ⚠ Icon or launcher missing; skipping"; return 0; }
   local tmp; tmp="$(mktemp -d)"
   cp "$ICNS" "$tmp/i.icns"
   sips -i "$tmp/i.icns" >/dev/null
@@ -99,13 +92,13 @@ apply_icon(){
   Rez -append "$tmp/i.rsrc" -o "$TARGET"
   SetFile -a C "$TARGET"
   rm -rf "$tmp"
-  echo "  아이콘 OK"
+  echo "  Icon OK"
 }
 
 download_models(){
-  log "모델 다운로드 (Qwen3-ASR + 화자분리 미러)"
+  log "Downloading models (Qwen3-ASR and speaker diarization)"
   if [ -z "$HF_TOKEN" ] && ! { [ -f .env ] && grep -q '^HF_TOKEN=' .env; }; then
-    echo "  ⚠ HF 토큰이 없어 건너뜀. 'cp .env.example .env'로 토큰 설정 후 'bash build.sh models' 실행."
+    echo "  ⚠ HF token is missing. Run 'cp .env.example .env', set your token, then run 'bash build.sh models'."
     return 0
   fi
   "$PY" scripts/download_models.py
@@ -119,6 +112,6 @@ case "${1:-all}" in
   models) download_models ;;
   prereqs) check_prereqs ;;
   all)    check_prereqs; setup_deps; build_apptap; apply_icon; build_app; download_models
-          log "완료 — 'STT실행.app' 더블클릭으로 실행" ;;
-  *) echo "사용: bash build.sh [all|prereqs|deps|apptap|app|icon|models]"; exit 2 ;;
+          log "Done. Open 'Meeting STT.app' to get started." ;;
+  *) echo "Usage: bash build.sh [all|prereqs|deps|apptap|app|icon|models]"; exit 2 ;;
 esac

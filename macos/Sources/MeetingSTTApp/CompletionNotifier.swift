@@ -24,8 +24,8 @@ final class CompletionNotifier: NSObject, UNUserNotificationCenterDelegate, @unc
         guard Self.canNotify(settings.authorizationStatus) else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "전사가 완료되었습니다"
-        content.body = "\(sessionTitle)의 전사 결과를 확인할 수 있습니다."
+        content.title = "Transcription complete"
+        content.body = "The transcript for \(sessionTitle) is ready."
         content.sound = .default
         content.userInfo = ["session_id": sessionID]
 

@@ -111,7 +111,7 @@ final class Recorder {
     // 앱(pid) 탭 녹음 시작.
     func start(pid: pid_t, outPath: String) {
         guard let procObj = processObject(forPID: pid) else {
-            fail("PID \(pid)의 오디오 프로세스를 찾을 수 없습니다. 그 앱이 소리를 내고 있나요?")
+            fail("Could not find an audio process for PID \(pid). Is the app playing audio?")
         }
         // Process Tap 생성 (들으면서 캡처: .unmuted)
         let tapDesc = CATapDescription(stereoMixdownOfProcesses: [procObj])
@@ -138,15 +138,15 @@ final class Recorder {
         // 1) Process Tap 생성
         var st = AudioHardwareCreateProcessTap(tapDesc, &tapID)
         if st != noErr || tapID == kAudioObjectUnknown {
-            fail("Process Tap 생성 실패(OSStatus \(st)). 시스템 설정 > 개인정보 보호 > 오디오 녹음에서 터미널 권한을 허용하세요.")
+            fail("Could not create the process tap (OSStatus \(st)). Allow audio recording for this app or terminal in System Settings > Privacy & Security.")
         }
 
         // 2) 탭 포맷 / UID
         guard let fmt = scalar(tapID, kAudioTapPropertyFormat, AudioStreamBasicDescription()) else {
-            fail("탭 포맷을 읽지 못했습니다.")
+            fail("Could not read the tap format.")
         }
         asbd = fmt
-        guard let tapUID = cfString(tapID, kAudioTapPropertyUID) else { fail("탭 UID를 읽지 못했습니다.") }
+        guard let tapUID = cfString(tapID, kAudioTapPropertyUID) else { fail("Could not read the tap UID.") }
 
         // 3) Aggregate device 생성 (탭 포함)
         let aggUID = "meeting_stt-agg-\(getpid())"
@@ -165,7 +165,7 @@ final class Recorder {
         ]
         st = AudioHardwareCreateAggregateDevice(desc as CFDictionary, &aggID)
         if st != noErr || aggID == kAudioObjectUnknown {
-            fail("집합 장치 생성 실패(OSStatus \(st)).")
+            fail("Could not create the aggregate device(OSStatus \(st)).")
         }
 
         // 4) 출력 wav (file: Int16 PCM, client: 탭 Float32)
@@ -181,20 +181,20 @@ final class Recorder {
             mReserved: 0)
         let url = URL(fileURLWithPath: outPath) as CFURL
         st = ExtAudioFileCreateWithURL(url, kAudioFileWAVEType, &fileASBD, nil, AudioFileFlags.eraseFile.rawValue, &extFile)
-        if st != noErr || extFile == nil { fail("wav 생성 실패(OSStatus \(st)): \(outPath)") }
+        if st != noErr || extFile == nil { fail("Could not create WAV(OSStatus \(st)): \(outPath)") }
         var clientASBD = asbd
         st = ExtAudioFileSetProperty(extFile!, kExtAudioFileProperty_ClientDataFormat,
                                      UInt32(MemoryLayout<AudioStreamBasicDescription>.size), &clientASBD)
-        if st != noErr { fail("client format 설정 실패(OSStatus \(st)).") }
+        if st != noErr { fail("Could not configure the client format(OSStatus \(st)).") }
 
         // 5) IOProc 설치 — self를 context로 전달
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         st = AudioDeviceCreateIOProcID(aggID, ioProc, ctx, &procID)
-        if st != noErr || procID == nil { fail("IOProc 생성 실패(OSStatus \(st)).") }
+        if st != noErr || procID == nil { fail("Could not create IOProc(OSStatus \(st)).") }
         st = AudioDeviceStart(aggID, procID)
-        if st != noErr { fail("녹음 시작 실패(OSStatus \(st)).") }
+        if st != noErr { fail("Could not start recording(OSStatus \(st)).") }
 
-        FileHandle.standardError.write("[apptap] 녹음 시작 (\(label), \(Int(asbd.mSampleRate))Hz, \(asbd.mChannelsPerFrame)ch) → \(outPath)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[apptap] Recording started (\(label), \(Int(asbd.mSampleRate))Hz, \(asbd.mChannelsPerFrame)ch) → \(outPath)\n".data(using: .utf8)!)
     }
 
     // 누적된 RMS를 한 줄로 stdout에 쓰고 누적값을 리셋한다(메인 타이머에서 호출).
@@ -313,22 +313,22 @@ case "list":
     runList()
 case "record":
     guard let pidStr = argValue("--pid"), let pid = pid_t(pidStr) else {
-        FileHandle.standardError.write("사용: apptap record --pid N --out FILE.wav\n".data(using: .utf8)!); exit(2)
+        FileHandle.standardError.write("Usage: apptap record --pid N --out FILE.wav\n".data(using: .utf8)!); exit(2)
     }
     guard let out = argValue("--out") else {
-        FileHandle.standardError.write("사용: apptap record --pid N --out FILE.wav\n".data(using: .utf8)!); exit(2)
+        FileHandle.standardError.write("Usage: apptap record --pid N --out FILE.wav\n".data(using: .utf8)!); exit(2)
     }
     let rec = Recorder()
     rec.start(pid: pid, outPath: out)
     runRecordLoop(rec)
 case "record-system":
     guard let out = argValue("--out") else {
-        FileHandle.standardError.write("사용: apptap record-system --out FILE.wav\n".data(using: .utf8)!); exit(2)
+        FileHandle.standardError.write("Usage: apptap record-system --out FILE.wav\n".data(using: .utf8)!); exit(2)
     }
     let rec = Recorder()
     rec.startGlobal(outPath: out)
     runRecordLoop(rec)
 default:
-    FileHandle.standardError.write("사용: apptap [list | record --pid N --out FILE.wav | record-system --out FILE.wav]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("Usage: apptap [list | record --pid N --out FILE.wav | record-system --out FILE.wav]\n".data(using: .utf8)!)
     exit(2)
 }

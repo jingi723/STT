@@ -36,11 +36,11 @@ def generate_local_notes(data: dict, wiki_ctx: Dict[str, str] | None = None) -> 
     없는 내용을 지어내지 않는다 — 결정사항/액션아이템은 사람이 채우거나 --prompt-only로
     AI Agent에게 맡기도록 placeholder만 제공한다(강의자료 규칙)."""
     # json에 키가 있어도 값이 None일 수 있어 'or'로 폴백(None 문자열 표기 방지)
-    date = data.get("date") or "[확인 필요]"
-    project = data.get("project") or "[확인 필요]"
-    source = data.get("audio_path") or "[확인 필요]"
+    date = data.get("date") or "[Needs confirmation]"
+    project = data.get("project") or "[Needs confirmation]"
+    source = data.get("audio_path") or "[Needs confirmation]"
     parts = _participants(data)
-    participants_line = ", ".join(parts) if parts else "[확인 필요]"
+    participants_line = ", ".join(parts) if parts else "[Needs confirmation]"
 
     md = []
     md.append("---")
@@ -53,28 +53,28 @@ def generate_local_notes(data: dict, wiki_ctx: Dict[str, str] | None = None) -> 
     md.append(f"participants: [{participants_line}]")
     md.append("tags: [meeting, stt, llm-wiki]")
     md.append("---\n")
-    md.append(f"# {date} {project} 회의록\n")
-    md.append("## 1. 회의 개요")
-    md.append(f"- 참석(화자): {participants_line}")
-    md.append(f"- 원본 오디오: {source}\n")
-    md.append("## 2. 핵심 논의")
-    md.append("> 아래는 화자 귀속 전사 원문입니다. 요약은 [확인 필요] — `--prompt-only`로 AI Agent 요약을 권장합니다.\n")
+    md.append(f"# {date} {project} Meeting notes\n")
+    md.append("## 1. Meeting overview")
+    md.append(f"- Participants (speakers): {participants_line}")
+    md.append(f"- Source audio: {source}\n")
+    md.append("## 2. Key discussion")
+    md.append("> The original speaker-attributed transcript follows. Summary: [Needs confirmation]. Use `--prompt-only` to prepare an AI summary prompt.\n")
     md.append("```")
     md.append(format_transcript_text(data))
     md.append("```\n")
-    md.append("## 3. 결정사항")
-    md.append("| 결정 | 근거 | 관련 문서 |")
+    md.append("## 3. Decisions")
+    md.append("| Decision | Evidence | Related documents |")
     md.append("|------|------|-----------|")
-    md.append("| [확인 필요] | [확인 필요] | |\n")
-    md.append("## 4. 액션아이템")
-    md.append("| 담당자 | 작업 | 마감일 | 근거 발화 | 상태 |")
+    md.append("| [Needs confirmation] | [Needs confirmation] | |\n")
+    md.append("## 4. Action items")
+    md.append("| Owner | Task | Deadline | Supporting statement | Status |")
     md.append("|--------|------|--------|-----------|------|")
-    md.append("| [확인 필요] | [확인 필요] | [확인 필요] | | 진행 전 |\n")
-    md.append("## 5. 리스크 / 확인 필요")
-    md.append("- [확인 필요]\n")
-    md.append("## 6. 다음 회의 아젠다")
-    md.append("- [확인 필요]\n")
-    md.append("## 7. 원본 transcript 링크")
+    md.append("| [Needs confirmation] | [Needs confirmation] | [Needs confirmation] | | Not started |\n")
+    md.append("## 5. Risks / Needs confirmation")
+    md.append("- [Needs confirmation]\n")
+    md.append("## 6. Next meeting agenda")
+    md.append("- [Needs confirmation]\n")
+    md.append("## 7. Source transcript link")
     md.append(f"- {source}")
     return "\n".join(md)
 
@@ -90,7 +90,7 @@ def _claude_cli() -> str:
     for cand in (os.path.expanduser("~/.local/bin/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"):
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
-    raise RuntimeError("claude CLI를 찾을 수 없습니다. Claude Code 설치 후 `claude` 로그인이 필요합니다.")
+    raise RuntimeError("Claude CLI was not found. Install Claude Code and sign in with `claude`.")
 
 
 def generate_ai_notes(data: dict, project: str = "My-app", wiki: str | None = None,
@@ -103,11 +103,11 @@ def generate_ai_notes(data: dict, project: str = "My-app", wiki: str | None = No
 
     prompt = generate_prompt(data, project=project)
     if wiki:
-        prompt = f"LLM-Wiki 루트: {wiki}\n\n{prompt}"
+        prompt = f"LLM-Wiki root: {wiki}\n\n{prompt}"
     else:
         # 위키가 없으면 참고 파일을 찾아 홈 디렉터리·외부 서비스를 뒤지는 것을 막는다
-        prompt = ("참고할 LLM-Wiki가 없습니다. 아래 위키 파일 참조 단계는 건너뛰고, "
-                  "파일 탐색이나 외부 검색 없이 transcript만으로 작성하세요.\n\n") + prompt
+        prompt = ("No LLM-Wiki is available. Skip the wiki reference steps below and "
+                  "write only from the transcript, without browsing files or external sources.\n\n") + prompt
 
     proc = subprocess.run(
         [_claude_cli(), "-p", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}'],
@@ -118,31 +118,31 @@ def generate_ai_notes(data: dict, project: str = "My-app", wiki: str | None = No
         cwd=tempfile.gettempdir(),  # 저장소 CLAUDE.md/스킬이 요약 프롬프트에 섞이지 않도록
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"claude CLI 실패(rc={proc.returncode}): {proc.stderr.strip()[:500]}")
+        raise RuntimeError(f"claude CLI failed(rc={proc.returncode}): {proc.stderr.strip()[:500]}")
     notes = proc.stdout.strip()
     if not notes:
-        raise RuntimeError("claude CLI가 빈 응답을 반환했습니다. `claude` 로그인 상태를 확인하세요.")
-    return f"{notes}\n\n---\n\n## 원본 전사\n\n```\n{format_transcript_text(data)}\n```\n"
+        raise RuntimeError("Claude CLI returned an empty response. Check your `claude` sign-in status.")
+    return f"{notes}\n\n---\n\n## Original transcript\n\n```\n{format_transcript_text(data)}\n```\n"
 
 
 def generate_prompt(data: dict, project: str = "My-app") -> str:
     """AI Agent(Claude Code/Codex)용 LLM-Wiki 참조 요약 프롬프트. transcript 포함."""
     transcript = format_transcript_text(data)
-    return f"""당신은 회의록 작성 보조자입니다. 다음 LLM-Wiki 파일을 먼저 참고하세요.
+    return f"""You are a meeting notes assistant. First consult the following LLM-Wiki files.
 - 02_Projects/{project}/project-overview.md
 - 02_Projects/{project}/glossary.md
 - 02_Projects/{project}/decisions.md
 - 03_People/team-members.md
 
-그 다음 아래 transcript를 읽고 회의록을 작성하세요.
+Then read the transcript below and write meeting notes in English. Preserve names and quoted statements in their original language.
 
-요구사항:
-- 없는 내용을 만들어내지 말 것. 불확실한 내용은 [확인 필요]로 표시.
-- 결정사항과 액션아이템을 분리. 액션아이템에는 담당자·작업·마감일·근거 발화 포함.
-- 기존 결정과 충돌하면 [기존 결정과 충돌 가능]으로 표시.
-- 새로 등장한 용어는 glossary 업데이트 후보로 따로 정리.
-- SPEAKER_00 등 익명 라벨은 team-members.md로 실명 매핑을 시도하되, 불확실하면 라벨 유지.
-- 출력은 04_Templates/meeting-template.md 형식의 Markdown.
+Requirements:
+- Do not invent facts. Mark uncertain information as [Needs confirmation].
+- Separate decisions and action items. Include an owner, task, deadline, and supporting statement for each action item.
+- Mark conflicts with prior decisions as [Possible conflict with an earlier decision].
+- List new terms separately as suggested glossary additions.
+- Map anonymous labels such as SPEAKER_00 using team-members.md only when certain; otherwise keep the labels.
+- Return Markdown following 04_Templates/meeting-template.md.
 
 --- TRANSCRIPT ---
 {transcript}

@@ -38,7 +38,7 @@ struct RecordingMixerTests {
             let s = try await system.stop()
             print("HOST microphone=\(String(describing: m.startedHostTime)) system=\(String(describing: s.startedHostTime))")
             let stats = try await RecordingMixer.mix(directory: directory, microphoneStart: m.startedHostTime, systemStart: s.startedHostTime)
-            try store.merge(sessionID: session.id, fields: ["status": .string("recorded"), "duration_sec": .number(stats.duration), "bytes": .integer(stats.bytes), "name": .string("시스템+마이크 동시 녹음 테스트")])
+            try store.merge(sessionID: session.id, fields: ["status": .string("recorded"), "duration_sec": .number(stats.duration), "bytes": .integer(stats.bytes), "name": .string("System + microphone recording test")])
             print("LIVE PASS: \(directory.path), \(stats.duration)s, \(stats.bytes) bytes")
         } catch {
             if mic.isRecording { _ = try? mic.stop() }

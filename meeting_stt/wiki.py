@@ -16,30 +16,30 @@ participants: []
 tags: [meeting, stt, llm-wiki]
 ---
 
-# {{date}} {{project}} 회의록
+# {{date}} {{project}} Meeting notes
 
-## 1. 회의 개요
+## 1. Meeting overview
 
-## 2. 핵심 논의
+## 2. Key discussion
 
-## 3. 결정사항
-| 결정 | 근거 | 관련 문서 |
+## 3. Decisions
+| Decision | Evidence | Related documents |
 |------|------|-----------|
 
-## 4. 액션아이템
-| 담당자 | 작업 | 마감일 | 근거 발화 | 상태 |
+## 4. Action items
+| Owner | Task | Deadline | Supporting statement | Status |
 |--------|------|--------|-----------|------|
 
-## 5. 리스크 / 확인 필요
+## 5. Risks / Needs confirmation
 
-## 6. 다음 회의 아젠다
+## 6. Next meeting agenda
 
-## 7. 원본 transcript 링크
+## 7. Source transcript link
 """
 
-ACTION_ITEM_TEMPLATE = """- [ ] **{담당자}** — {작업} (마감: {마감일})
-  - 근거 발화: "{인용}"
-  - 상태: 진행 전 | 진행 중 | 완료
+ACTION_ITEM_TEMPLATE = """- [ ] **{Owner}** — {Task} (Due: {Deadline})
+  - Supporting statement: "{Quote}"
+  - Status: Not started | In progress | Complete
 """
 
 
@@ -49,11 +49,11 @@ def _seed_files(project: str) -> Dict[str, str]:
     return {
         "04_Templates/meeting-template.md": MEETING_TEMPLATE,
         "04_Templates/action-item-template.md": ACTION_ITEM_TEMPLATE,
-        f"{proj}/project-overview.md": f"# {project} 프로젝트 개요\n\n- 목표:\n- 범위:\n- 현재 상태:\n",
-        f"{proj}/glossary.md": "# 용어집\n\n| 용어 | 설명 |\n|------|------|\n",
-        f"{proj}/decisions.md": "# 결정 로그\n\n| 날짜 | 결정 | 근거 |\n|------|------|------|\n",
-        f"{proj}/meeting-log.md": "# 회의 로그\n\n| 날짜 | 회의 | 링크 |\n|------|------|------|\n",
-        "03_People/team-members.md": "# 팀원\n\n| 이름 | 역할 | 화자라벨 |\n|------|------|----------|\n",
+        f"{proj}/project-overview.md": f"# {project} Project overview\n\n- Goals:\n- Scope:\n- Current status:\n",
+        f"{proj}/glossary.md": "# Glossary\n\n| Term | Description |\n|------|------|\n",
+        f"{proj}/decisions.md": "# Decision log\n\n| Date | Decision | Evidence |\n|------|------|------|\n",
+        f"{proj}/meeting-log.md": "# Meeting log\n\n| Date | Meeting | Link |\n|------|------|------|\n",
+        "03_People/team-members.md": "# Team members\n\n| Name | Role | Speaker label |\n|------|------|----------|\n",
     }
 
 
