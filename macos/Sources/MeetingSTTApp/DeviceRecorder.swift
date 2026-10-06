@@ -33,6 +33,7 @@ public final class DeviceRecorder {
     private var inputFormat = AudioStreamBasicDescription()
     private var recording = false
     private var starting = false
+    private var paused = false
 
     public init() {}
 
@@ -107,6 +108,7 @@ public final class DeviceRecorder {
         try stateLock.withLock {
             guard !recording, !starting else { throw MeetingSTTCoreError.processAlreadyRunning }
             starting = true
+            paused = false
         }
         defer { stateLock.withLock { starting = false } }
         guard let selected = try Self.inputDevices().first(where: { $0.id == deviceID }) else {
@@ -233,8 +235,14 @@ public final class DeviceRecorder {
         return RecordingStats(duration: duration, bytes: bytes, startedHostTime: firstHostTime)
     }
 
+    /// 일시 정지 중에는 장치와 파일을 유지한 채 들어오는 프레임을 버린다.
+    public func setPaused(_ paused: Bool) {
+        stateLock.withLock { self.paused = paused }
+    }
+
     fileprivate func write(_ inputData: UnsafePointer<AudioBufferList>, timestamp: AudioTimeStamp) -> OSStatus {
         guard let audioFile else { return kAudio_ParamError }
+        if stateLock.withLock({ paused }) { return noErr }
         let bytesPerFrame = inputFormat.mBytesPerFrame
         guard bytesPerFrame > 0 else { return kAudio_ParamError }
         let frames = inputData.pointee.mBuffers.mDataByteSize / bytesPerFrame

@@ -7,6 +7,7 @@
 //
 // record / record-system 둘 다 실시간 레벨(RMS)을 stdout에 약 200ms마다 한 줄로 출력:
 //   LEVEL <float>\n        # 예: "LEVEL 0.012300"  (무음이면 "LEVEL 0.0")
+// SIGUSR1 = 일시 정지, SIGUSR2 = 재개 (준비되면 stdout에 "PAUSABLE" 한 줄).
 // stderr에는 기존 시작 로그를 유지한다.
 //
 // 빌드:
@@ -101,6 +102,14 @@ final class Recorder {
     var sampleCount: UInt64 = 0
     var firstHostTime: Double?
     var emittedStart = false
+    var paused = false
+
+    // 일시 정지 중에는 탭·파일을 유지한 채 IOProc가 프레임을 버린다.
+    func setPaused(_ value: Bool) {
+        os_unfair_lock_lock(&levelLock)
+        paused = value
+        os_unfair_lock_unlock(&levelLock)
+    }
 
     func fail(_ msg: String) -> Never {
         FileHandle.standardError.write(("[apptap] " + msg + "\n").data(using: .utf8)!)
@@ -241,10 +250,12 @@ let ioProc: AudioDeviceIOProc = { (_, _, inInputData, inputTime, _, _, context) 
     if frames == 0 { return noErr }
 
     os_unfair_lock_lock(&rec.levelLock)
-    if rec.firstHostTime == nil, inputTime.pointee.mFlags.contains(.hostTimeValid) {
+    let paused = rec.paused
+    if !paused, rec.firstHostTime == nil, inputTime.pointee.mFlags.contains(.hostTimeValid) {
         rec.firstHostTime = AVAudioTime.seconds(forHostTime: inputTime.pointee.mHostTime)
     }
     os_unfair_lock_unlock(&rec.levelLock)
+    if paused { return noErr }
 
     // RMS 누적 (Float32, interleaved/non-interleaved 모두 모든 buffer 순회).
     if rec.asbd.mFormatID == kAudioFormatLinearPCM,
@@ -296,6 +307,18 @@ func runRecordLoop(_ rec: Recorder) {
     sigSrc2.resume()
     signal(SIGTERM, SIG_IGN)
     signal(SIGINT, SIG_IGN)
+
+    // SIGUSR1/SIGUSR2 = 일시 정지/재개. 핸들러 설치 뒤에 PAUSABLE을 알려,
+    // 부모가 이 신호를 모르는 옛 바이너리에 보내 녹음을 죽이는 일을 막는다.
+    let pauseSrc = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+    pauseSrc.setEventHandler { rec.setPaused(true) }
+    pauseSrc.resume()
+    let resumeSrc = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
+    resumeSrc.setEventHandler { rec.setPaused(false) }
+    resumeSrc.resume()
+    signal(SIGUSR1, SIG_IGN)
+    signal(SIGUSR2, SIG_IGN)
+    FileHandle.standardOutput.write("PAUSABLE\n".data(using: .utf8)!)
 
     // 약 200ms마다 stdout에 LEVEL 한 줄(하트비트 신호원).
     let levelTimer = DispatchSource.makeTimerSource(queue: .main)

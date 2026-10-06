@@ -9,7 +9,8 @@ struct RecordingMixerTests {
         try await tests.testSilentSystemKeepsMicrophone()
         try await tests.testMissingTimestampDoesNotPublishAudio()
         try await tests.testFailedMixPreservesOriginal()
-        print("PASS: resampling, both start orders, overlap, tail, source preservation, missing timestamp, failed mix")
+        try await tests.testPauseBeforeSystemStartDoesNotDelaySystem()
+        print("PASS: resampling, both start orders, overlap, tail, source preservation, missing timestamp, failed mix, pause alignment")
         if CommandLine.arguments.contains("--live") { try await tests.live() }
     }
     func live() async throws {
@@ -97,6 +98,22 @@ struct RecordingMixerTests {
         let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 48_000)!
         try file.read(into: buffer)
         expectEqual(buffer.floatChannelData![0][4_800], 0.1, accuracy: 0.005)
+    }
+
+    func testPauseBeforeSystemStartDoesNotDelaySystem() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try track(directory.appendingPathComponent("microphone.wav"), rate: 48_000, channels: 1, seconds: 1, value: 0.2)
+        try track(directory.appendingPathComponent("system.wav"), rate: 48_000, channels: 2, seconds: 0.25, value: 0.4)
+        // Mic ran 10...10.5, paused for 60 s, ran 70.5...71; system audio first arrived at 70.75.
+        let stats = try await RecordingMixer.mix(directory: directory, microphoneStart: 10, systemStart: 70.75, pauses: [10.5...70.5])
+        expectEqual(stats.duration, 1, accuracy: 0.001)
+        let file = try AVAudioFile(forReading: directory.appendingPathComponent("audio.wav"))
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
+        try file.read(into: buffer)
+        expectEqual(buffer.floatChannelData![0][4_800], 0.1, accuracy: 0.005)
+        expectEqual(buffer.floatChannelData![0][42_000], 0.3, accuracy: 0.005)
     }
 
     func testMissingTimestampDoesNotPublishAudio() async throws {

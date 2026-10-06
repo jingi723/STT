@@ -54,7 +54,7 @@ Allow **Microphone** access for microphone recording and **Screen & System Audio
 
 1. Open `Meeting STT.app`.
 2. Keep **System + Microphone** selected and choose your microphone.
-3. Click **Start recording**.
+3. Click **Start recording**. Use **Pause** and **Resume recording** for breaks; paused time is left out of the recording.
 4. Click **Stop recording** to save and combine both tracks.
 5. Select the saved session and click **Start transcription**.
 6. Generate meeting notes or copy the transcript when it is ready.

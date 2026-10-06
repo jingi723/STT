@@ -12,7 +12,8 @@ enum RecordingMixer {
         return URL(fileURLWithPath: path)
     }
 
-    static func mix(directory: URL, microphoneStart: Double?, systemStart: Double?) async throws -> RecordingStats {
+    /// `pauses`: host-time ranges during which both recorders dropped frames.
+    static func mix(directory: URL, microphoneStart: Double?, systemStart: Double?, pauses: [ClosedRange<Double>] = []) async throws -> RecordingStats {
         let systemURL = directory.appendingPathComponent("system.wav")
         let microphoneURL = directory.appendingPathComponent("microphone.wav")
         let systemFile = try AVAudioFile(forReading: systemURL)
@@ -25,9 +26,13 @@ enum RecordingMixer {
               microphoneStart.isFinite, systemStart.isFinite else {
             throw MeetingSTTCoreError.recording("Recording timestamps are missing. Rebuild native/apptap. The original microphone.wav and system.wav have been preserved.")
         }
-        let origin = min(microphoneStart, systemStart)
-        let micDelay = Int(((microphoneStart - origin) * 48_000).rounded())
-        let systemDelay = Int(((systemStart - origin) * 48_000).rounded())
+        // Paused time is in neither file, so a track whose first frame arrived after a pause
+        // must not be delayed by the length of that pause.
+        let unpaused = { (time: Double) in time - pauses.reduce(0) { $0 + max(0, min(time, $1.upperBound) - $1.lowerBound) } }
+        let micStart = unpaused(microphoneStart), sysStart = unpaused(systemStart)
+        let origin = min(micStart, sysStart)
+        let micDelay = Int(((micStart - origin) * 48_000).rounded())
+        let systemDelay = Int(((sysStart - origin) * 48_000).rounded())
         let temporary = directory.appendingPathComponent("audio-mixing.wav")
         let output = directory.appendingPathComponent("audio.wav")
         // Equal fixed gains avoid clipping and volume jumps when one track ends.
