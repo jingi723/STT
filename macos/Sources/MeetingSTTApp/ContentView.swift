@@ -188,6 +188,12 @@ struct ContentView: View {
                         }
                         .disabled(!model.canStopRecording)
                         .keyboardShortcut("r", modifiers: [.command, .shift])
+                        Button {
+                            model.togglePause()
+                        } label: {
+                            Label(model.isPaused ? "녹음 재개" : "일시 정지", systemImage: model.isPaused ? "record.circle" : "pause.fill")
+                        }
+                        .disabled(!model.canStopRecording)
                     } else {
                         Button {
                             Task { await model.startRecording() }

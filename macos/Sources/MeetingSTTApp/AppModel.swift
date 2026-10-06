@@ -89,6 +89,7 @@ final class AppModel: ObservableObject {
     @Published var selectedSessionID: String?
 
     @Published private(set) var elapsed: TimeInterval = 0
+    @Published private(set) var isPaused = false
     @Published private(set) var rmsLevel = 0.0
     @Published private(set) var recordedBytes: Int64 = 0
 
@@ -117,6 +118,8 @@ final class AppModel: ObservableObject {
     private var activeSource: CaptureSource?
     private var activeAudioURL: URL?
     private var recordingStartedAt: Date?
+    private var pausedSince = 0.0
+    private var pauses: [ClosedRange<Double>] = []
     private var lastLevelAt = Date.distantPast
     private var recordingGeneration: UUID?
     private var workerGeneration: UUID?
@@ -190,7 +193,7 @@ final class AppModel: ObservableObject {
         switch activity {
         case .idle: "대기 중"
         case .startingRecording: "녹음을 준비하는 중…"
-        case .recording: "녹음 중"
+        case .recording: isPaused ? "일시 정지됨" : "녹음 중"
         case .stoppingRecording: "WAV를 마무리하는 중…"
         case .transcribing: "전사 중…"
         case .generatingNotes(_, let promptOnly): promptOnly ? "프롬프트 생성 중…" : "회의록 생성 중…"
@@ -441,6 +444,30 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// 장치·탭·WAV는 그대로 두고 프레임만 버린다. 정지 구간은 결과 파일에서 빠진다.
+    func togglePause() {
+        guard case .recording(_, let source) = activity, let nativeRecorder else { return }
+        let pausing = !isPaused
+        do {
+            // ponytail: 두 녹음기를 신호·플래그로 따로 멈춰 정지마다 트랙이 수 ms 어긋날 수 있다.
+            // 문제가 되면 공유 host time 기준으로 양쪽을 게이트한다.
+            if source != .device { try nativeRecorder.setPaused(pausing) }
+            if source == .device || source == .systemAndMic { deviceRecorder.setPaused(pausing) }
+        } catch {
+            presentError(pausing ? "일시 정지 실패" : "녹음 재개 실패", error)
+            return
+        }
+        let now = AVAudioTime.seconds(forHostTime: mach_absolute_time())
+        if pausing {
+            pausedSince = now
+        } else {
+            pauses.append(pausedSince...now)
+            recordingStartedAt = Date().addingTimeInterval(-elapsed)
+        }
+        isPaused = pausing
+        appendLog(pausing ? "녹음 일시 정지" : "녹음 재개")
+    }
+
     func stopRecording() async {
         guard case .recording = activity,
               let sessionID = activeSessionID,
@@ -464,7 +491,8 @@ final class AppModel: ObservableObject {
                 stats = try await RecordingMixer.mix(
                     directory: audioURL.deletingLastPathComponent(),
                     microphoneStart: microphone.startedHostTime,
-                    systemStart: system.startedHostTime
+                    systemStart: system.startedHostTime,
+                    pauses: pauses
                 )
             case .device: stats = try deviceRecorder.stop()
             case .app, .system: stats = try await nativeRecorder.stop()
@@ -760,7 +788,7 @@ final class AppModel: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(200))
                 guard !Task.isCancelled, let self, self.recordingGeneration == generation else { return }
-                if let startedAt = self.recordingStartedAt {
+                if !self.isPaused, let startedAt = self.recordingStartedAt {
                     self.elapsed = Date().timeIntervalSince(startedAt)
                 }
                 if Date().timeIntervalSince(self.lastLevelAt) > 0.5 { self.rmsLevel = 0 }
@@ -877,6 +905,8 @@ final class AppModel: ObservableObject {
         activeSource = nil
         activeAudioURL = nil
         recordingStartedAt = nil
+        isPaused = false
+        pauses = []
         lastLevelAt = .distantPast
         rmsLevel = 0
         if !keepMetrics {

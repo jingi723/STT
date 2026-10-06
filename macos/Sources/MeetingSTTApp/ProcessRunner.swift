@@ -177,8 +177,20 @@ public final class NativeRecorder {
                 stderr: result.stderr.isEmpty && !exited ? "SIGTERM 후 5초 안에 WAV finalize가 끝나지 않았습니다." : result.stderr
             )
         }
-        let bytes = try Self.validateWAV(recording.outputURL)
-        return RecordingStats(duration: Date().timeIntervalSince(recording.startedAt), bytes: bytes, startedHostTime: recording.firstHostTime)
+        let (bytes, duration) = try Self.validateWAV(recording.outputURL)
+        return RecordingStats(duration: duration, bytes: bytes, startedHostTime: recording.firstHostTime)
+    }
+
+    /// 탭과 WAV는 유지하고 apptap이 프레임만 버리게 한다.
+    public func setPaused(_ paused: Bool) throws {
+        guard let recording = lock.withLock({ active }), recording.process.isRunning else {
+            throw MeetingSTTCoreError.noProcessRunning
+        }
+        // SIGUSR1의 기본 동작은 종료다 — 핸들러가 없는 옛 apptap에 보내면 녹음이 finalize 없이 죽는다.
+        guard recording.isPausable else {
+            throw MeetingSTTCoreError.recording("이 apptap은 일시 정지를 지원하지 않습니다. bash build.sh apptap으로 다시 빌드하세요.")
+        }
+        kill(recording.process.processIdentifier, paused ? SIGUSR1 : SIGUSR2)
     }
 
     public func cancel() {
@@ -252,7 +264,7 @@ public final class NativeRecorder {
         )
     }
 
-    private static func validateWAV(_ url: URL) throws -> Int64 {
+    private static func validateWAV(_ url: URL) throws -> (bytes: Int64, duration: TimeInterval) {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
               let number = attributes[.size] as? NSNumber,
               number.int64Value > 44
@@ -264,15 +276,18 @@ public final class NativeRecorder {
         guard status == noErr, let audioFile else {
             throw MeetingSTTCoreError.recording("WAV finalize 결과를 열 수 없습니다 (OSStatus \(status)): \(url.path)")
         }
-        AudioFileClose(audioFile)
-        return number.int64Value
+        defer { AudioFileClose(audioFile) }
+        // 일시 정지 구간은 파일에 없으므로 벽시계가 아니라 파일에서 길이를 읽는다.
+        var duration = 0.0
+        var size = UInt32(MemoryLayout<Double>.size)
+        AudioFileGetProperty(audioFile, kAudioFilePropertyEstimatedDuration, &size, &duration)
+        return (number.int64Value, duration)
     }
 }
 
 private final class NativeRecording: @unchecked Sendable {
     let process: Process
     let outputURL: URL
-    let startedAt = Date()
     private let stdout: Pipe
     private let stderr: Pipe
     private let stdoutBuffer = BoundedTextBuffer()
@@ -285,9 +300,11 @@ private final class NativeRecording: @unchecked Sendable {
     private var audioStart: Double?
     var firstHostTime: Double? { stateLock.withLock { audioStart } }
     private var started = false
+    private var pausable = false
     private var draining = false
 
     var hasStarted: Bool { stateLock.withLock { started } }
+    var isPausable: Bool { stateLock.withLock { pausable } }
 
     init(
         process: Process,
@@ -319,6 +336,8 @@ private final class NativeRecording: @unchecked Sendable {
             drain(self.stdout.fileHandleForReading, buffer: self.stdoutBuffer) { [self] line in
                 if line.hasPrefix("START_HOST "), let value = Double(line.dropFirst(11)) {
                     self.stateLock.withLock { self.audioStart = value }
+                } else if line == "PAUSABLE" {
+                    self.stateLock.withLock { self.pausable = true }
                 } else if line.hasPrefix("LEVEL "), let value = Double(line.dropFirst(6)) {
                     self.onLevel(value)
                 } else if !line.isEmpty {

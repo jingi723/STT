@@ -15,7 +15,7 @@ macOS는 앱이 시스템/다른 앱의 출력 오디오를 직접 못 잡게 �
 ## 헬퍼 인터페이스 (Python이 의존 — 고정)
 바이너리 `native/apptap`:
 - `apptap list` — JSON 배열 출력: `[{"pid","name","bundleID"}]` (오디오 객체로 잡히는 프로세스).
-- `apptap record --pid N --out FILE.wav` — 해당 PID 오디오를 wav로 녹음. **SIGINT/SIGTERM 받으면 파일을 정상 종료(finalize)** 후 종료. (서버가 start=프로세스 시작, stop=SIGTERM로 제어)
+- `apptap record --pid N --out FILE.wav` — 해당 PID 오디오를 wav로 녹음. **SIGINT/SIGTERM 받으면 파일을 정상 종료(finalize)** 후 종료. (서버가 start=프로세스 시작, stop=SIGTERM로 제어) **SIGUSR1=일시 정지, SIGUSR2=재개**(탭·파일은 유지하고 프레임만 버림). 핸들러 준비 후 stdout에 `PAUSABLE` 한 줄을 내며, 호출자는 이 줄을 본 뒤에만 신호를 보낸다(옛 바이너리는 SIGUSR1에 죽는다).
 
 ## 빌드
 ```bash
