@@ -90,6 +90,7 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var isPaused = false
+    @Published private(set) var microphoneNotice: String?
     @Published private(set) var rmsLevel = 0.0
     @Published private(set) var recordedBytes: Int64 = 0
 
@@ -395,11 +396,19 @@ final class AppModel: ObservableObject {
             let onLevel: @Sendable (Double) -> Void = { [weak self] level in
                 Task { @MainActor in self?.receiveLevel(level, generation: generation) }
             }
+            let onMicrophoneChange: @Sendable (String?, Bool) -> Void = { [weak self] name, isSelected in
+                Task { @MainActor in self?.microphoneChanged(to: name, isSelected: isSelected, generation: generation) }
+            }
 
             switch captureSource {
             case .systemAndMic:
                 let directory = audioURL.deletingLastPathComponent()
-                try deviceRecorder.start(deviceID: deviceID!, outputURL: directory.appendingPathComponent("microphone.wav"), onLevel: { _ in })
+                try deviceRecorder.start(
+                    deviceID: deviceID!,
+                    outputURL: directory.appendingPathComponent("microphone.wav"),
+                    onLevel: { _ in },
+                    onDeviceChange: onMicrophoneChange
+                )
                 try await nativeRecorder.startSystem(
                     outputURL: directory.appendingPathComponent("system.wav"),
                     onLevel: onLevel,
@@ -407,7 +416,7 @@ final class AppModel: ObservableObject {
                     onExit: nativeExitCallback(generation: generation)
                 )
             case .device:
-                try deviceRecorder.start(deviceID: deviceID!, outputURL: audioURL, onLevel: onLevel)
+                try deviceRecorder.start(deviceID: deviceID!, outputURL: audioURL, onLevel: onLevel, onDeviceChange: onMicrophoneChange)
             case .app:
                 try await nativeRecorder.startApp(
                     pid: pid!,
@@ -782,6 +791,21 @@ final class AppModel: ObservableObject {
         lastLevelAt = Date()
     }
 
+    /// 녹음은 DeviceRecorder가 알아서 이어 간다. 여기서는 사용자가 알 수 있게만 한다.
+    private func microphoneChanged(to name: String?, isSelected: Bool, generation: UUID) {
+        guard recordingGeneration == generation else { return }
+        if isSelected {
+            microphoneNotice = nil
+            appendLog("마이크 복귀: \(name ?? "")")
+        } else if let name {
+            microphoneNotice = "선택한 마이크 연결이 끊겨 대신 \(name)에서 녹음 중입니다. 다시 연결되면 원래 마이크로 돌아갑니다."
+            appendLog("마이크 전환: \(name)")
+        } else {
+            microphoneNotice = "마이크 연결이 끊겼습니다. 다시 연결될 때까지 마이크 소리는 무음으로 이어집니다."
+            appendLog("마이크 끊김: 붙일 입력 장치가 없습니다.")
+        }
+    }
+
     private func startHeartbeat(generation: UUID) {
         heartbeatTask?.cancel()
         heartbeatTask = Task { [weak self] in
@@ -906,6 +930,7 @@ final class AppModel: ObservableObject {
         activeAudioURL = nil
         recordingStartedAt = nil
         isPaused = false
+        microphoneNotice = nil
         pauses = []
         lastLevelAt = .distantPast
         rmsLevel = 0

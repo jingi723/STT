@@ -10,7 +10,8 @@ struct RecordingMixerTests {
         try await tests.testMissingTimestampDoesNotPublishAudio()
         try await tests.testFailedMixPreservesOriginal()
         try await tests.testPauseBeforeSystemStartDoesNotDelaySystem()
-        print("PASS: resampling, both start orders, overlap, tail, source preservation, missing timestamp, failed mix, pause alignment")
+        try tests.testVirtualInputBridgesDeviceChangesWithSilence()
+        print("PASS: resampling, both start orders, overlap, tail, source preservation, missing timestamp, failed mix, pause alignment, device change")
         if CommandLine.arguments.contains("--live") { try await tests.live() }
     }
     func live() async throws {
@@ -114,6 +115,70 @@ struct RecordingMixerTests {
         try file.read(into: buffer)
         expectEqual(buffer.floatChannelData![0][4_800], 0.1, accuracy: 0.005)
         expectEqual(buffer.floatChannelData![0][42_000], 0.3, accuracy: 0.005)
+    }
+
+    func testVirtualInputBridgesDeviceChangesWithSilence() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        func format(_ rate: Double, _ channels: UInt32) -> AudioStreamBasicDescription {
+            AudioStreamBasicDescription(
+                mSampleRate: rate, mFormatID: kAudioFormatLinearPCM,
+                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+                mBytesPerPacket: 4 * channels, mFramesPerPacket: 1, mBytesPerFrame: 4 * channels,
+                mChannelsPerFrame: channels, mBitsPerChannel: 32, mReserved: 0)
+        }
+        let headset = format(24_000, 1), builtIn = format(48_000, 2)
+        let input = try VirtualInput(url: url, format: headset)
+        var clock = 100.0
+        // 10ms 버퍼를 host time에 맞춰 넣는다. usleep은 비동기 writer가 따라올 틈이다.
+        func feed(_ format: AudioStreamBasicDescription, seconds: Double, value: Float) {
+            let frames = Int(format.mSampleRate / 100)
+            var samples = [Float](repeating: value, count: frames * Int(format.mChannelsPerFrame))
+            for _ in 0..<Int(seconds * 100) {
+                samples.withUnsafeMutableBytes { raw in
+                    var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(
+                        mNumberChannels: format.mChannelsPerFrame, mDataByteSize: UInt32(raw.count), mData: raw.baseAddress))
+                    expectEqual(input.write(&list, hostTime: clock), noErr)
+                }
+                clock += 0.01
+                usleep(500)
+            }
+        }
+        func gap(seconds: Double) {
+            for _ in 0..<Int(seconds * 20) {
+                clock += 0.05
+                input.tick(hostTime: clock)
+                usleep(500)
+            }
+        }
+        feed(headset, seconds: 1, value: 0.25)
+        input.detach()                              // 헤드셋이 끊김
+        gap(seconds: 1)
+        try input.attach(format: builtIn)           // 포맷이 다른 대체 장치
+        feed(builtIn, seconds: 1, value: 0.5)
+        input.detach()
+        input.setPaused(true, at: clock)            // 공백 중의 일시 정지는 무음으로 채우지 않는다
+        clock += 5
+        input.tick(hostTime: clock)
+        input.setPaused(false, at: clock)
+        gap(seconds: 0.5)
+        try input.attach(format: headset)           // 헤드셋이 돌아옴
+        feed(headset, seconds: 1, value: 0.25)
+        input.detach()                              // 붙일 장치가 없는 채로 정지해도 그 시간만큼 무음이 남는다
+        gap(seconds: 0.5)
+        let result = try input.finish()
+        expectEqual(result.duration, 5, accuracy: 0.05)
+        expectEqual(result.startedHostTime ?? 0, 100, accuracy: 0.0001)
+
+        let file = try AVAudioFile(forReading: url)
+        expectEqual(file.fileFormat.sampleRate, 24_000)
+        expectEqual(Double(file.length) / 24_000, 5, accuracy: 0.05)
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
+        try file.read(into: buffer)
+        let samples = buffer.floatChannelData![0]
+        for (second, value) in [(0.5, 0.25), (1.5, 0), (2.5, 0.5), (3.25, 0), (4.0, 0.25), (4.75, 0)] as [(Double, Float)] {
+            expectEqual(samples[Int(second * 24_000)], value, accuracy: 0.005)
+        }
     }
 
     func testMissingTimestampDoesNotPublishAudio() async throws {
