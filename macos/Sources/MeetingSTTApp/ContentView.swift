@@ -44,6 +44,21 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .navigationTitle(model.selectedSession.map(model.sessionTitle) ?? "회의 전사")
+            .overlay(alignment: .bottom) {
+                ZStack {
+                    if let toast = model.toast {
+                        Label(toast, systemImage: "checkmark.circle.fill")
+                            .padding(.horizontal, Layout.large)
+                            .padding(.vertical, Layout.small)
+                            .background(.regularMaterial, in: Capsule())
+                            .shadow(radius: Layout.xSmall)
+                            .padding(.bottom, Layout.xLarge)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: model.toast)
+                .allowsHitTesting(false)
+            }
         }
         .task { await model.start() }
         .alert("이름 변경", isPresented: renamePresented) {

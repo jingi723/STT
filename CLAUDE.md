@@ -17,6 +17,7 @@
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
+| 2026-10-08 | 결과 복사 확인 토스트 | AppModel(`toast`, `showToast`: 2초 뒤 자동으로 사라짐 + VoiceOver 알림), ContentView(상세 화면 아래 overlay) | 사용자 요청: 복사했을 때 복사됐다는 표시가 로그 한 줄뿐이라 눈에 띄지 않음 |
 | 2026-10-08 | 자식 프로세스 종료 대기 멈춤 수정 | ProcessRunner(`ProcessExit`: `waitUntilExit()` 대신 `run()` 전에 건 종료 핸들러 신호를 기다림 — `ProcessExecution.run`·`NativeRecording` 3곳), 믹서 테스트(짧은 프로세스 150회) | `scripts/test-recording.sh`가 가끔 끝나지 않음. GCD 스레드에서 부른 `waitUntilExit()`이 금방 끝나는 프로세스의 종료 알림을 놓침(20~50번에 한 번꼴). 앱의 녹음 합치기·전사 worker·apptap도 같은 경로 |
 | 2026-10-08 | 녹음 중 마이크 장치 자동 전환 + `!dev` 정지 오류 수정 | DeviceRecorder(`VirtualInput`: WAV 하나를 유지하고 장치를 붙였다 뗌, 공백은 무음, 포맷이 다른 장치는 AudioConverter로 변환; 장치 목록·기본 입력 변화 감시 후 `reconcile`), AppModel(`microphoneNotice`), ContentView 경고, 믹서 테스트 | AirPods가 녹음 중 끊기자 정지 시 `OSStatus !dev`로 합치기가 건너뛰어져 세션이 오류 처리됨. 끊기면 기본 입력으로 넘어가고 돌아오면 복귀하도록 사용자 요청 |
 | 2026-10-06 | 녹음 일시 정지/재개 | apptap(SIGUSR1/2 + `PAUSABLE` 핸드셰이크), DeviceRecorder·NativeRecorder(`setPaused`), AppModel(`togglePause`), RecordingMixer(`pauses` 보정), ContentView 버튼, 믹서 테스트 | 사용자 요청: 종료 전에 녹음을 멈췄다 이어가기. 정지 구간은 WAV에서 제외 |

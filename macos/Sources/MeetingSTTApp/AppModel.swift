@@ -91,6 +91,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var isPaused = false
     @Published private(set) var microphoneNotice: String?
+    @Published private(set) var toast: String?
     @Published private(set) var rmsLevel = 0.0
     @Published private(set) var recordedBytes: Int64 = 0
 
@@ -125,6 +126,7 @@ final class AppModel: ObservableObject {
     private var recordingGeneration: UUID?
     private var workerGeneration: UUID?
     private var heartbeatTask: Task<Void, Never>?
+    private var toastTask: Task<Void, Never>?
     private var playbackTask: Task<Void, Never>?
     private var audioPlayer: AVAudioPlayer?
 
@@ -731,6 +733,19 @@ final class AppModel: ObservableObject {
             return
         }
         appendLog("현재 결과를 클립보드에 복사했습니다.")
+        showToast("클립보드에 복사했습니다")
+    }
+
+    /// 잠깐 떴다 사라지는 확인 메시지. 다시 부르면 표시 시간을 새로 잰다.
+    private func showToast(_ message: String) {
+        toastTask?.cancel()
+        toast = message
+        AccessibilityNotification.Announcement(message).post()
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.toast = nil
+        }
     }
 
     func dismissError() {
