@@ -209,6 +209,11 @@ struct ContentView: View {
                     Spacer()
                 }
 
+                if let notice = model.microphoneNotice {
+                    Label(notice, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+
                 if model.isRecordingOrStopping {
                     Grid(alignment: .leading, horizontalSpacing: Layout.large, verticalSpacing: Layout.small) {
                         GridRow {

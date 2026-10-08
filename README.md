@@ -70,6 +70,8 @@ System capture includes notification sounds and music from other apps. Headphone
 
 Both original tracks are retained. Their first audio-frame timestamps align the combined recording, and ffmpeg converts them to a 48 kHz mono WAV. If there is no system playback, the system track is treated as silence.
 
+If the selected microphone disconnects while recording (for example, AirPods dropping out), recording continues from the macOS default input device and switches back when the microphone reconnects. Time with no input device attached is written as silence, so the single microphone track stays aligned with system audio. The recording panel shows a warning while this is happening.
+
 ## Local data and optional AI
 
 Recordings, models, transcripts, and notes stay in local directories excluded from Git. Recording and speech inference run locally after model setup. No cloud speech service is required.
@@ -136,7 +138,7 @@ python3 tests/test_english.py
 python3 -m compileall -q meeting_stt scripts
 ```
 
-The recording tests exercise different sample rates, start-time alignment in both directions, overlapping audio, trailing audio, silence, and failure handling. They use a standalone Swift test runner so full Xcode is not required. Add `--live` to play a quiet test tone and save a five-second system/microphone test session. Hardware tests need the corresponding macOS permissions; a silent microphone track is not proof of voice capture.
+The recording tests exercise different sample rates, start-time alignment in both directions, overlapping audio, trailing audio, silence, failure handling, and input-device changes mid-recording. They use a standalone Swift test runner so full Xcode is not required. Add `--live` to play a quiet test tone and save a five-second system/microphone test session. Hardware tests need the corresponding macOS permissions; a silent microphone track is not proof of voice capture.
 
 ## Troubleshooting
 
