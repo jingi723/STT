@@ -318,4 +318,4 @@ STT_env/bin/python -m meeting_stt --help
 
 ### 녹음 합성 회귀 테스트
 
-`bash scripts/test-recording.sh`는 실제 합성 코드를 사용해 샘플레이트 변환, 시작 순서별 동기화, 두 소스의 음량, 끝부분 보존과 실패 시 원본 보존, 녹음 중 입력 장치 교체 시 무음 채움을 검사합니다. Xcode 없이 Command Line Tools와 ffmpeg로 실행할 수 있습니다. `--live`를 추가하면 작은 테스트음을 재생하며 기본 마이크와 시스템 출력을 5초간 녹음하고 테스트 세션을 저장합니다.
+`bash scripts/test-recording.sh`는 실제 합성 코드를 사용해 샘플레이트 변환, 시작 순서별 동기화, 두 소스의 음량, 끝부분 보존과 실패 시 원본 보존, 녹음 중 입력 장치 교체 시 무음 채움, 금방 끝나는 자식 프로세스의 종료 대기를 검사합니다. Xcode 없이 Command Line Tools와 ffmpeg로 실행할 수 있습니다. `--live`를 추가하면 작은 테스트음을 재생하며 기본 마이크와 시스템 출력을 5초간 녹음하고 테스트 세션을 저장합니다.
