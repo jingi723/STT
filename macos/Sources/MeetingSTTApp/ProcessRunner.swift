@@ -293,6 +293,7 @@ private final class NativeRecording: @unchecked Sendable {
     private let stdoutBuffer = BoundedTextBuffer()
     private let stderrBuffer = BoundedTextBuffer()
     private let group = DispatchGroup()
+    private let exit: ProcessExit
     private let stateLock = NSLock()
     private let onLevel: @Sendable (Double) -> Void
     private let onLog: @Sendable (String) -> Void
@@ -316,6 +317,7 @@ private final class NativeRecording: @unchecked Sendable {
         onExit: @escaping @Sendable (Result<ProcessResult, Error>) -> Void
     ) {
         self.process = process
+        self.exit = ProcessExit(process)
         self.outputURL = outputURL
         self.stdout = stdout
         self.stderr = stderr
@@ -355,7 +357,7 @@ private final class NativeRecording: @unchecked Sendable {
             group.leave()
         }
         DispatchQueue.global(qos: .userInitiated).async { [self] in
-            process.waitUntilExit()
+            exit.wait()
             group.wait()
             let result = ProcessResult(
                 exitCode: process.terminationStatus,
@@ -377,7 +379,7 @@ private final class NativeRecording: @unchecked Sendable {
     func result() async -> ProcessResult {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async { [self] in
-                process.waitUntilExit()
+                exit.wait()
                 group.wait()
                 continuation.resume(returning: ProcessResult(
                     exitCode: process.terminationStatus,
@@ -407,6 +409,7 @@ enum ProcessExecution {
         process.environment = environment
         process.standardOutput = stdout
         process.standardError = stderr
+        let exit = ProcessExit(process)
 
         do {
             try process.run()
@@ -429,7 +432,7 @@ enum ProcessExecution {
                 group.leave()
             }
             DispatchQueue.global(qos: .userInitiated).async {
-                process.waitUntilExit()
+                exit.wait()
                 group.wait()
                 continuation.resume(returning: ProcessResult(
                     exitCode: process.terminationStatus,
@@ -438,6 +441,23 @@ enum ProcessExecution {
                 ))
             }
         }
+    }
+}
+
+/// 자식 프로세스의 종료를 기다린다. `Process.waitUntilExit()`은 GCD 스레드에서 부르면 금방 끝나는
+/// 프로세스의 종료 알림을 놓쳐 영영 돌아오지 않는 일이 있어(짧은 프로세스 20~50번에 한 번꼴로 실측),
+/// 종료 핸들러의 신호를 기다린다. 반드시 `process.run()` 전에 만들어야 한다.
+private final class ProcessExit: @unchecked Sendable {
+    private let done = DispatchSemaphore(value: 0)
+
+    init(_ process: Process) {
+        process.terminationHandler = { [done] _ in done.signal() }
+    }
+
+    /// 여러 곳에서 기다려도 되도록 받은 신호를 다음 대기자에게 넘긴다.
+    func wait() {
+        done.wait()
+        done.signal()
     }
 }
 

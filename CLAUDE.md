@@ -18,7 +18,7 @@ Native SwiftUI macOS app for local meeting capture, Qwen3-ASR-1.7B transcription
 
 Default capture is system audio plus microphone. Preserve `microphone.wav` and `system.wav`, align their first-frame host timestamps, and publish `audio.wav` only after successful mixing. Pausing keeps devices and files open and drops frames in both recorders; pass the paused host-time ranges to the mixer, and signal `apptap` (SIGUSR1/SIGUSR2) only after its `PAUSABLE` line. `DeviceRecorder` writes the microphone through `VirtualInput`: one WAV with a fixed client format, with physical devices attached and detached as they come and go (selected device, then current device, then default input). Fill time with no device as silence in small chunks: the async ExtAudioFile writer silently loses the rest of the file past about 144 KB in one burst, and its client format cannot change once writing has started, so other formats go through an AudioConverter. Session metadata lives in `outputs/recordings/{session-id}/metadata.json`. Keep this disk contract compatible with the Python worker.
 
-Request macOS audio permissions through normal APIs. Never bypass TCC. Do not expose PID selection in the default recording path. Keep expensive file reads and worker tasks off the main actor.
+Request macOS audio permissions through normal APIs. Never bypass TCC. Do not expose PID selection in the default recording path. Keep expensive file reads and worker tasks off the main actor. Wait for child processes through `ProcessExit`, which installs a termination handler before `run()`; `Process.waitUntilExit()` on a GCD thread can miss a short-lived child's exit and never return.
 
 ## Validation
 

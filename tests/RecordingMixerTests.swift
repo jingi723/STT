@@ -11,7 +11,8 @@ struct RecordingMixerTests {
         try await tests.testFailedMixPreservesOriginal()
         try await tests.testPauseBeforeSystemStartDoesNotDelaySystem()
         try tests.testVirtualInputBridgesDeviceChangesWithSilence()
-        print("PASS: resampling, both start orders, overlap, tail, source preservation, missing timestamp, failed mix, pause alignment, device change")
+        try await tests.testShortProcessesAlwaysReturn()
+        print("PASS: resampling, both start orders, overlap, tail, source preservation, missing timestamp, failed mix, pause alignment, device change, process exit")
         if CommandLine.arguments.contains("--live") { try await tests.live() }
     }
     func live() async throws {
@@ -179,6 +180,19 @@ struct RecordingMixerTests {
         for (second, value) in [(0.5, 0.25), (1.5, 0), (2.5, 0.5), (3.25, 0), (4.0, 0.25), (4.75, 0)] as [(Double, Float)] {
             expectEqual(samples[Int(second * 24_000)], value, accuracy: 0.005)
         }
+    }
+
+    func testShortProcessesAlwaysReturn() async throws {
+        // waitUntilExit로 기다리던 때에는 금방 끝나는 프로세스 20~50번에 한 번꼴로 영영 돌아오지 않았다.
+        let watchdog = DispatchWorkItem { fatalError("ProcessExecution.run did not return") }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: watchdog)
+        for _ in 0..<150 {
+            let result = try await ProcessExecution.run(
+                process: Process(), executable: URL(fileURLWithPath: "/usr/bin/true"), arguments: [],
+                currentDirectory: FileManager.default.temporaryDirectory, environment: [:])
+            expectEqual(result.exitCode, 0)
+        }
+        watchdog.cancel()
     }
 
     func testMissingTimestampDoesNotPublishAudio() async throws {

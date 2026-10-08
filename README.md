@@ -138,7 +138,7 @@ python3 tests/test_english.py
 python3 -m compileall -q meeting_stt scripts
 ```
 
-The recording tests exercise different sample rates, start-time alignment in both directions, overlapping audio, trailing audio, silence, failure handling, and input-device changes mid-recording. They use a standalone Swift test runner so full Xcode is not required. Add `--live` to play a quiet test tone and save a five-second system/microphone test session. Hardware tests need the corresponding macOS permissions; a silent microphone track is not proof of voice capture.
+The recording tests exercise different sample rates, start-time alignment in both directions, overlapping audio, trailing audio, silence, failure handling, input-device changes mid-recording, and child processes that exit immediately. They use a standalone Swift test runner so full Xcode is not required. Add `--live` to play a quiet test tone and save a five-second system/microphone test session. Hardware tests need the corresponding macOS permissions; a silent microphone track is not proof of voice capture.
 
 ## Troubleshooting
 
